@@ -50,7 +50,7 @@ local function parse(tokens)
 	local function consume(variant, data)
 		local token = tokens[index]
 		assert(token, "Expected " .. TokenDebugVariant[variant] .. ", got EOI")
-		assert(token.variant == variant, "Expected " .. TokenDebugVariant[variant] .. ", got " .. TokenDebugVariant[token.variant])
+		assert(token.variant == variant, "Expected " .. TokenDebugVariant[variant] .. " (" .. tostring(data) .. "), got " .. TokenDebugVariant[token.variant] .. " (" .. tostring(token.data) .. ")")
 		if data ~= nil then assert(token.data == data, "Expected " .. data .. ", got " .. tostring(token.data)) end
 		index = index + 1
 		return token
@@ -94,7 +94,14 @@ local function parse(tokens)
 			return Node { variant = Variant.Negate, data = expr() }
 		end
 
-		local lhs = prim()
+		local lhs
+		if optConsume(TokenVariant.Operator, "(") then
+			lhs = expr()
+			consume(TokenVariant.Operator, ")")
+		else
+			lhs = prim()
+		end
+
 		if optConsume(TokenVariant.Operator, "+") then
 			return Node { variant = Variant.Add, data = { lhs, assert(expr(), "Expected rhs expression for addition") } }
 		elseif optConsume(TokenVariant.Operator, "-") then
@@ -118,16 +125,18 @@ local function parse(tokens)
 
 		local stmts = {}
 		while index < len do
+			if not no_bracket and optConsume(TokenVariant.Operator, "}") then break end
 			stmts[#stmts + 1] = assert(stmt(), "Failed to parse token " .. tostring(tokens[index]))
 		end
 
-		if not no_bracket then consume(TokenVariant.Operator, "}") end
 		return Node { variant = Variant.Block, data = stmts }
 	end
 
 	function stmt()
 		if optConsume(TokenVariant.Keyword, "if") then
 			return Node { variant = Variant.If, data = { assert(expr(), "Expected expression after if statement"), block() } }
+		elseif optConsume(TokenVariant.Keyword, "while") then
+			return Node { variant = Variant.While, data = { assert(expr(), "Expected expression for while loop"), block() } }
 		elseif optConsume(TokenVariant.Keyword, "let") then
 			local name = consume(TokenVariant.Identifier)
 			consume(TokenVariant.Operator, "=")

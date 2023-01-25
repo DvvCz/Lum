@@ -98,12 +98,7 @@ local function lex(code)
 	end
 
 	local function next()
-		local data = consume("^(//[^\n]+)")
-		if data then
-			return Token { variant = Variant.Comment, data = data }
-		end
-
-		data = consume("^(%d+%.%d+)")
+		local data = consume("^(%d+%.%d+)")
 		if data then
 			return Token { variant = Variant.Float, data = tonumber(data) }
 		end
@@ -141,9 +136,9 @@ local function lex(code)
 	end
 
 	while ptr <= len do
-		consume("^%s+", true) -- Skip whitespace
+		repeat consume("^%s+", true) until not consume("^(//[^\n]+)", true) -- Skip whitespace & Comments
 		tokens[#tokens + 1] = assert( next(), "Failed to lex string: (" .. code:sub(ptr, ptr + 5) .. ")" )
-		consume("^%s+", true)
+		repeat consume("^%s+", true) until not consume("^(//[^\n]+)", true)
 	end
 
 	return tokens
