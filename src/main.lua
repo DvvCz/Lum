@@ -24,9 +24,9 @@ end
 local Class = require "jvm.class"
 
 local bin = Class.new("SimplJ")
-	:withStrings { "<init>", "([Ljava/lang/String;)V" }
+	:withStrings { "java/lang/Object", "main", "<init>", "Code", "()V", "([Ljava/lang/String;)V" }
 	:encode()
 
-local out = io.open("out.class", "wb")
+local out = io.open("SimpleJ.class", "wb")
 out:write(bin)
 out:close()

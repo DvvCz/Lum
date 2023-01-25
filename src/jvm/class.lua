@@ -3,8 +3,13 @@ local Constant = require "jvm.constant"
 
 local ACCESS = {
 	PUBLIC = 0x0001,
+	PRIVATE = 0x0002,
+	PROTECTED = 0x0004,
+	STATIC = 0x0008,
 	FINAL = 0x0010,
 	SUPER = 0x0020,
+	VOLATILE = 0x0040,
+	TRANSIENT = 0x0080,
 	INTERFACE = 0x0200,
 	ABSTRACT = 0x0400,
 	SYNTHETIC = 0x1000,
@@ -59,7 +64,12 @@ function Class:encode()
 		return i
 	end
 
-	local main = Const("Class", self.string_table[self.name])
+	local main_class = Const("Class", self.string_table[self.name])
+
+	local object_class = Const("Class", self.string_table["java/lang/Object"])
+
+	local main_name_and_type = Const("NameAndType", { self.string_table["<init>"], self.string_table["()V"] })
+	local main_function = Const("MethodRef", { object_class, main_name_and_type })
 
 	vec:writeU2(#constants + 1) -- constant_pool_count
 	for _, const in ipairs(constants) do
@@ -67,18 +77,45 @@ function Class:encode()
 	end
 
 	vec:writeU2(ACCESS.SUPER) -- access_flags
-	vec:writeU2(main) -- this_class (index to constant table)
-	vec:writeU2(0) -- super_class
+	vec:writeU2(main_class) -- this_class (index to constant table)
+	vec:writeU2(object_class) -- super_class
 
 	vec:writeU2(0) -- interfaces_count
 	vec:writeU2(0) -- fields_count
 
-	vec:writeU2(1) -- methods_count
+	vec:writeU2(2) -- methods_count
 
-	vec:writeU2(ACCESS.PUBLIC)
-	vec:writeU2(self.string_table["<init>"])
-	vec:writeU2(self.string_table["([Ljava/lang/String;)V"])
 	vec:writeU2(0)
+	vec:writeU2(self.string_table["<init>"])
+	vec:writeU2(self.string_table["()V"])
+	vec:writeU2(1)
+
+	vec:writeU2(self.string_table["Code"])
+	vec:writeU4(2 + 2 + 4 + 5 + 2 + 2) -- attribute length
+	vec:writeU2(1) -- max stack
+	vec:writeU2(1) -- max locals
+	vec:writeU4(5) -- code length
+	vec:writeU1(0x2a) -- aload_0
+	vec:writeU1(0xb7) -- invokespecial
+	vec:writeU2(main_function) -- Invoke constructor
+	vec:writeU1(0xb1) -- return
+	vec:writeU2(0) -- exception table length
+	vec:writeU2(0) -- attributes count
+
+	vec:writeU2(ACCESS.PUBLIC + ACCESS.STATIC)
+	vec:writeU2(self.string_table["main"])
+	vec:writeU2(self.string_table["([Ljava/lang/String;)V"])
+	vec:writeU2(1)
+
+	vec:writeU2(self.string_table["Code"])
+	vec:writeU4(2 + 2 + 4 + 1 + 2 + 2) -- attribute length
+	vec:writeU2(0) -- max stack
+	vec:writeU2(0) -- max locals
+	vec:writeU4(1) -- code length
+	vec:writeU1(0xb1) -- return
+	vec:writeU2(0) -- exception table length
+	vec:writeU2(0) -- attributes count
+
 
 	vec:writeU2(0) -- attributes_count
 
