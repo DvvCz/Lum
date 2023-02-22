@@ -73,12 +73,24 @@ local Target = {
 				return table.concat(buffer)
 			elseif variant == IRVariant.While then
 				return string.format("while %s do\n%s\nend", expr(data[1]), stmt(data[2]))
+			elseif variant == IRVariant.Fn then
+				local param_names = {}
+				for k, param in ipairs(data[2]) do
+					param_names[k] = param[1]
+				end
+				return string.format("local function %s(%s)\n%s\nend", data[1], table.concat(param_names, ", "), stmt(data[3]))
 			elseif variant == IRVariant.Declare then
 				return string.format("local %s = %s", data[1], expr(data[2]))
 			elseif variant == IRVariant.Assign then
 				return string.format("%s = %s", data[1], expr(data[2]))
+			elseif variant == IRVariant.Call then
+				local args = {}
+				for k, arg in ipairs(data[2]) do
+					args[k] = expr(arg)
+				end
+				return string.format("%s(%s)", data[1], table.concat(args, ", "))
 			else
-				error("Unimplemented stmt")
+				error("Unimplemented stmt: " .. variant)
 			end
 		end
 

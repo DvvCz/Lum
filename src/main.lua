@@ -13,11 +13,9 @@ local tokens = Lexer.lex([[
 	let y = "dd" + "xyssz"
 
 	if true {
-		foo()
 	} else if false {
-		let x = 4
+		let x = 4.2 + 3.2
 	} else {
-		foo()
 	}
 
 	while true && true {

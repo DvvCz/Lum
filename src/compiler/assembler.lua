@@ -45,36 +45,44 @@ local Variant = {
 	Module = 1,
 	Scope = 2,
 
-	If = 3, -- if <exp> {}
-	While = 4, -- while <exp> {}
+	If = 3,
+	While = 4,
+	Fn = 5,
 
-	Assign = 5, -- x = 5
-	Declare = 6, -- let x = 5
+	Assign = 6,
+	Declare = 7,
 
-	Call = 7,
+	Call = 8,
 
-	Negate = 8,
+	Negate = 9,
 
-	Add = 9,
-	Sub = 10,
-	Mul = 11,
-	Div = 12,
+	Add = 10,
+	Sub = 11,
+	Mul = 12,
+	Div = 13,
 
-	And = 13,
-	Or = 14,
+	And = 14,
+	Or = 15,
 
-	Literal = 15, -- "" 22 22.0
-	Identifier = 16
+	Literal = 16, -- "" 22 22.0
+	Identifier = 17
 }
 
 ---@class Scope
----@field data table<string, IRVariable>
+---@field vars table<string, IRVariable>
 ---@field parent Scope?
 local Scope = {}
+Scope.__index = Scope
+
+---@param var string
+---@return IRVariable?
+function Scope:find(var)
+	return self.vars[var] or (self.parent and self.parent:find(var))
+end
 
 ---@return Scope
 function Scope.new(parent)
-	return setmetatable({ data = {}, parent = parent }, Scope)
+	return setmetatable({ vars = {}, parent = parent }, Scope)
 end
 
 ---@param ast Node
@@ -86,7 +94,7 @@ local function assemble(ast)
 	---@param fn fun(scope: table<string, IRVariable>): T?
 	---@return T
 	local function scope(fn)
-		current = Scope.new(current)
+		current = setmetatable({ vars = {}, parent = current }, Scope)
 		local ret = fn(current)
 		current = current.parent
 		return ret
@@ -98,19 +106,23 @@ local function assemble(ast)
 
 		if variant == nv.Add then
 			local lhs_ty, rhs_ty = typeNode(node.data[1]), typeNode(node.data[2])
-			assert(lhs_ty == rhs_ty, "Cannot add differing types")
+			assert(lhs_ty == rhs_ty, "Cannot add differing types (" .. lhs_ty .. " and " .. rhs_ty .. ")")
+			assert(lhs_ty == "int" or lhs_ty == "float" or lhs_ty == "string", "Cannot add type: " .. lhs_ty)
 			return lhs_ty
 		elseif variant == nv.Sub then
 			local lhs_ty, rhs_ty = typeNode(node.data[1]), typeNode(node.data[2])
-			assert(lhs_ty == rhs_ty, "Cannot sub differing types")
+			assert(lhs_ty == rhs_ty, "Cannot subtract differing types (" .. lhs_ty .. " and " .. rhs_ty .. ")")
+			assert(lhs_ty == "int" or lhs_ty == "float" or lhs_ty == "string", "Cannot subtract type: " .. lhs_ty)
 			return lhs_ty
 		elseif variant == nv.Mul then
 			local lhs_ty, rhs_ty = typeNode(node.data[1]), typeNode(node.data[2])
-			assert(lhs_ty == rhs_ty, "Cannot mul differing types")
+			assert(lhs_ty == rhs_ty, "Cannot multiply differing types (" .. lhs_ty .. " and " .. rhs_ty .. ")")
+			assert(lhs_ty == "int" or lhs_ty == "float" or lhs_ty == "string", "Cannot multiply type: " .. lhs_ty)
 			return lhs_ty
 		elseif variant == nv.Div then
 			local lhs_ty, rhs_ty = typeNode(node.data[1]), typeNode(node.data[2])
-			assert(lhs_ty == rhs_ty, "Cannot div differing types")
+			assert(lhs_ty == rhs_ty, "Cannot divide differing types (" .. lhs_ty .. " and " .. rhs_ty .. ")")
+			assert(lhs_ty == "int" or lhs_ty == "float" or lhs_ty == "string", "Cannot divide type: " .. lhs_ty)
 			return lhs_ty
 		elseif variant == nv.And then
 			local lhs_ty, rhs_ty = typeNode(node.data[1]), typeNode(node.data[2])
@@ -143,15 +155,15 @@ local function assemble(ast)
 				return items
 			end))
 		elseif variant == nv.Declare then
-			if current.data[data[1]] then
+			if current.vars[data[1]] then
 				error("Cannot re-declare existing variable " .. data[1])
 			else
-				current.data[data[1]] = typeNode(data[2])
+				current.vars[data[1]] = IRVariable.new(typeNode(data[2]))
 				return IR.new(Variant.Declare, { data[1], assembleNode(data[2]) })
 			end
 		elseif variant == nv.Assign then
-			local expected, got = assert(current.data[data[1]], "Variable " .. node.data[1] .. " does not exist"), typeNode(node.data[2])
-			assert(expected == got, "Cannot assign type " .. got .. " to variable of " .. expected)
+			local expected, got = assert(current:find(data[1]), "Variable " .. node.data[1] .. " does not exist"), typeNode(node.data[2])
+			assert(expected.type == got, "Cannot assign type " .. got .. " to variable of " .. expected.type)
 			return IR.new(Variant.Assign, { data[1], assembleNode(data[2]) })
 		elseif variant == nv.If then
 			local chain = {}
@@ -162,9 +174,25 @@ local function assemble(ast)
 			return IR.new(Variant.If, chain)
 		elseif variant == nv.While then
 			return IR.new(Variant.While, { assembleNode(data[1]), assembleNode(data[2]) })
+		elseif variant == nv.Fn then -- todo verify types are valid
+			local name, param_types = data[1], {}
+			for k, param in ipairs(data[2]) do
+				param_types[k] = param[2]
+			end
+			current.vars[name] = IRVariable.new("fn(" .. table.concat(param_types) .. ")")
+			return IR.new(Variant.Fn, { data[1], data[2], assembleNode(data[3]) })
 		elseif variant == nv.Call then -- todo arguments
-			local fn = assert(current.data[data[1]], "Calling nonexistant function: " .. data[1])
-			return IR.new(Variant.Call, { fn, {} })
+			local fn = assert(current:find(data[1]), "Calling nonexistant function: " .. data[1])
+
+			local args, argtypes = {}, {}
+			for k, arg in ipairs(data[2]) do
+				args[k], argtypes[k] = assembleNode(arg), typeNode(arg)
+			end
+
+			local sig = "fn(" .. table.concat(argtypes, ",") .. ")"
+			assert(fn.type == sig, "Calling function with incorrect parameters: Expected " .. fn.type .. ", got " .. sig)
+
+			return IR.new(Variant.Call, { data[1], args })
 		elseif variant == nv.Add then
 			return IR.new(Variant.Add, { assembleNode(data[1]), assembleNode(data[2]) })
 		elseif variant == nv.Sub then

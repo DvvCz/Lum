@@ -22,33 +22,21 @@ local Keywords = {
 }
 
 local Operators = {
-	["{"] = true,
-	["}"] = true,
-	["("] = true,
-	[")"] = true,
-	["["] = true,
-	["]"] = true,
+	["{"] = true, ["("] = true, ["["] = true,
+	["}"] = true, [")"] = true, ["]"] = true,
 
-	[">"] = true,
-	["<"] = true,
-	[">="] = true,
-	["<="] = true,
-	["=="] = "==",
+	[">"] = true, ["<"] = true,
+	[">="] = true, ["<="] = true,
+	["=="] = true,
 
-	["+"] = true,
-	["-"] = "-",
-	["*"] = true,
-	["/"] = true,
+	["+"] = true, ["+="] = true,
+	["-"] = true, ["-="] = true,
+	["*"] = true, ["*="] = true,
+	["/"] = true, ["/="] = true,
 
-	["+="] = "+=",
-	["-="] = true,
-	["*="] = true,
-	["/="] = true,
+	["||"] = true, ["&&"] = true,
 
-	["||"] = true,
-	["&&"] = true,
-
-	[","] = true,
+	[","] = true, [":"] = true,
 	["="] = true
 }
 
