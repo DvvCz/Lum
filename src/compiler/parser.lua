@@ -7,20 +7,23 @@ local Variant = {
 	If = 1, -- if <exp> {}
 	While = 2, -- while <exp> {}
 
-	Assign = 2, -- x = 5
-	Declare = 3, -- let x = 5
+	Assign = 3, -- x = 5
+	Declare = 4, -- let x = 5
 
-	Negate = 4,
+	Call = 5,
 
-	Add = 5,
-	Sub = 6,
-	Mul = 7,
-	Div = 8,
+	Negate = 6,
 
-	And = 9,
-	Or = 10,
+	Add = 7,
+	Sub = 8,
+	Mul = 9,
+	Div = 10,
 
-	Literal = 11, -- "" 22 22.0
+	And = 11,
+	Or = 12,
+
+	Literal = 13, -- "" 22 22.0
+	Identifier = 14
 }
 
 local DebugVariant = {}
@@ -42,6 +45,7 @@ local function Node(data)
 end
 
 ---@param tokens Token[]
+---@return Node
 local function parse(tokens)
 	local index, len = 1, #tokens
 
@@ -86,6 +90,11 @@ local function parse(tokens)
 		data = optConsume(TokenVariant.Boolean)
 		if data then
 			return Node { variant = Variant.Literal, data = { "boolean", data.data } }
+		end
+
+		data = optConsume(TokenVariant.Identifier)
+		if data then
+			return Node { variant = Variant.Identifier, data = data.data }
 		end
 	end
 
@@ -134,13 +143,37 @@ local function parse(tokens)
 
 	function stmt()
 		if optConsume(TokenVariant.Keyword, "if") then
-			return Node { variant = Variant.If, data = { assert(expr(), "Expected expression after if statement"), block() } }
+			---@type { [1]: Node?, [2]: Node }
+			local chain = { { assert(expr(), "Expected expression after if statement"), block() } }
+
+			while optConsume(TokenVariant.Keyword, "else") do
+				if optConsume(TokenVariant.Keyword, "if") then
+					chain[#chain + 1] = { assert(expr(), "Expected expression after elseif keyword"), block() }
+				else
+					chain[#chain + 1] = { nil, block() }
+					break
+				end
+			end
+
+			return Node { variant = Variant.If, data = chain }
 		elseif optConsume(TokenVariant.Keyword, "while") then
 			return Node { variant = Variant.While, data = { assert(expr(), "Expected expression for while loop"), block() } }
 		elseif optConsume(TokenVariant.Keyword, "let") then
 			local name = consume(TokenVariant.Identifier)
 			consume(TokenVariant.Operator, "=")
-			return Node { variant = Variant.Declare, data = { name, assert(expr(), "Expected expression for declaration of " .. name.data) } }
+			return Node { variant = Variant.Declare, data = { name.data, assert(expr(), "Expected expression for declaration of " .. name.data) } }
+		else
+			local name = optConsume(TokenVariant.Identifier)
+			if name then
+				if optConsume(TokenVariant.Operator, "=") then
+					return Node { variant = Variant.Assign, data = { name.data, assert(expr(), "Expected expression for assignment of " .. name.data) } }
+				elseif optConsume(TokenVariant.Operator, "(") then -- todo: accept arguments
+					consume(TokenVariant.Operator, ")")
+					return Node { variant = Variant.Call, data = { name.data, {} } }
+				else
+					index = index - 1 -- Expression
+				end
+			end
 		end
 	end
 

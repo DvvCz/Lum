@@ -1,5 +1,5 @@
-local ByteVec = require "jvm.bytevec"
-local Constant = require "jvm.constant"
+local ByteVec = require "targets.jvm.bytevec"
+local Constant = require "targets.jvm.constant"
 
 local ACCESS = {
 	PUBLIC = 0x0001,
@@ -20,6 +20,7 @@ local ACCESS = {
 
 ---@class Class
 ---@field name string
+---@field entry_point string
 ---@field string_table table<string, integer>
 ---@field string_count integer
 local Class = {}
@@ -31,6 +32,7 @@ function Class.new(name)
 	return setmetatable({ name = name, string_table = { [name] = 1 }, string_count = 1 }, Class)
 end
 
+---@param strs string[]
 function Class:withStrings(strs)
 	local count, len = self.string_count, #strs
 	for k = 1, len do
@@ -40,6 +42,27 @@ function Class:withStrings(strs)
 	return self
 end
 
+---@param name string
+function Class:withEntryPoint(name)
+	self.entry_point = name
+	self:allocString(name)
+	return self
+end
+
+function Class:allocString(str)
+	if self.string_table[str] then
+		return self.string_table[str]
+	else
+		self.string_count = self.string_count + 1
+		self.string_table[str] = self.string_count
+		return self.string_count
+	end
+end
+
+function Class:assemble()
+	
+end
+
 function Class:encode()
 	local vec = ByteVec.new()
 	vec:writeU4(0xCAFEBABE) -- magic
@@ -47,11 +70,6 @@ function Class:encode()
 	vec:writeU2(61) -- major_version (61 for Java SE 17)
 
 	local constants = {}
-
-	---@param str string
-	local function Str(str)
-		return self.string_table[str]
-	end
 
 	for str, i in pairs(self.string_table) do
 		constants[i] = Constant.new("Utf8", str)
@@ -117,7 +135,11 @@ function Class:encode()
 	vec:writeU2(0) -- attributes count
 
 
-	vec:writeU2(0) -- attributes_count
+	vec:writeU2(1) -- attributes_count
+
+	vec:writeU2(self.string_table["SourceFile"])
+	vec:writeU4(2)
+	vec:writeU2(self.string_table[self.name])
 
 	return vec:getOutput()
 end

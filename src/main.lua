@@ -3,30 +3,40 @@ package.path = package.path .. ";src/?.lua"
 local Lexer = require "compiler.lexer"
 local Parser = require "compiler.parser"
 local Optimizer = require "compiler.optimizer"
+local Assembler = require "compiler.assembler"
+
+local lua = require "targets.lua"
 
 local tokens = Lexer.lex([[
-	// Test
-	if 22 + 55 {
-		// Test
-		let x = 5 + (6 * 2) * 10 - 2
+	// Hello, world!
+	let x = 5 + -2 * 2
+	let y = "dd" + "xyssz"
+
+	if true {
+		foo()
+	} else if false {
+		let x = 4
+	} else {
+		foo()
 	}
 
-	while true {}
+	while true && true {
+		let x = 22
+		let dd = "fffff"
+		x = 55
+	}
 ]])
 
 local ast = Parser.parse(tokens)
-local opt_ast = Optimizer.optimize(ast)
+local ir = Assembler.assemble(ast)
+local oir = Optimizer.optimize(ir)
 
-for k, v in ipairs(opt_ast) do
-	print(k, v.data[1])
-end
+local out = io.open("foo.lua", "wb")
+out:write(lua.generate(oir))
+out:close()
 
-local Class = require "jvm.class"
-
-local bin = Class.new("SimplJ")
-	:withStrings { "java/lang/Object", "main", "<init>", "Code", "()V", "([Ljava/lang/String;)V" }
-	:encode()
+--[[local bin = JVM.generate(program)
 
 local out = io.open("SimpleJ.class", "wb")
 out:write(bin)
-out:close()
+out:close()]]

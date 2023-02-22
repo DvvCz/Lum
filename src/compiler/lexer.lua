@@ -18,6 +18,7 @@ local Keywords = {
 	["while"] = true,
 	["for"] = true,
 	["let"] = true,
+	["fn"] = true
 }
 
 local Operators = {
