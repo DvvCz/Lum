@@ -8,23 +8,25 @@ local Variant = {
 	While = 2, -- while <exp> {}
 	Fn = 3,
 
-	Assign = 4, -- x = 5
-	Declare = 5, -- let x = 5
+	Use = 4,
 
-	Call = 6,
+	Assign = 5, -- x = 5
+	Declare = 6, -- let x = 5
 
-	Negate = 7,
+	Call = 7,
 
-	Add = 8,
-	Sub = 9,
-	Mul = 10,
-	Div = 11,
+	Negate = 8,
 
-	And = 12,
-	Or = 13,
+	Add = 9,
+	Sub = 10,
+	Mul = 11,
+	Div = 12,
 
-	Literal = 14, -- "" 22 22.0
-	Identifier = 15
+	And = 13,
+	Or = 14,
+
+	Literal = 15, -- "" 22 22.0
+	Identifier = 16
 }
 
 local DebugVariant = {}
