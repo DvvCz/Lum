@@ -19,7 +19,10 @@ local Keywords = {
 	["for"] = true,
 	["let"] = true,
 	["fn"] = true,
-	["use"] = true
+
+	["use"] = true, ["pub"] = true, ["export"] = true,
+
+	["const"] = true, -- compile time block
 }
 
 local Operators = {
@@ -37,7 +40,7 @@ local Operators = {
 
 	["||"] = true, ["&&"] = true,
 
-	[","] = true, [":"] = true,
+	[","] = true, [":"] = true, ["."] = true,
 	["="] = true
 }
 

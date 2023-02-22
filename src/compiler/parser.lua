@@ -3,15 +3,13 @@ local TokenDebugVariant, TokenVariant = lexer.DebugVariant, lexer.Variant
 
 ---@enum NodeVariant
 local Variant = {
-	Block = 0,
-	If = 1, -- if <exp> {}
-	While = 2, -- while <exp> {}
-	Fn = 3,
+	Block = 1, -- {} (or top level)
+	If = 2, -- if <exp> {}
+	While = 3, -- while <exp> {}
+	Fn = 4, -- fn <name>((<NAME>:<TYPE>),*) {}
 
-	Use = 4,
-
-	Assign = 5, -- x = 5
-	Declare = 6, -- let x = 5
+	Declare = 5, -- let x = 5
+	Assign = 6, -- x = 5
 
 	Call = 7,
 
@@ -74,10 +72,12 @@ local function parse(tokens)
 		end
 	end
 
+	local stmt, arguments, block
+
 	local function prim()
 		local data = optConsume(TokenVariant.Integer)
 		if data then
-			return Node { variant = Variant.Literal, data = { "int", data.data } }
+			return Node { variant = Variant.Literal, data = { "integer", data.data } }
 		end
 
 		data = optConsume(TokenVariant.Float)
@@ -101,9 +101,16 @@ local function parse(tokens)
 		end
 	end
 
+	---@return Node?
 	local function expr()
 		if optConsume(TokenVariant.Operator, "-") then
 			return Node { variant = Variant.Negate, data = expr() }
+		end
+
+		if optConsume(TokenVariant.Keyword, "const") then
+			local b = block()
+			b.data[1] = true -- mark block as constant
+			return b
 		end
 
 		local lhs
@@ -113,6 +120,18 @@ local function parse(tokens)
 		else
 			lhs = prim()
 		end
+
+		if not lhs then return end
+
+		local args = arguments()
+		if args then
+			return Node { variant = Variant.Call, data = { lhs.data, args } }
+		end
+
+		--[[if optConsume(TokenVariant.Operator, ".") then
+				local rest = 
+			end
+		end]]
 
 		if optConsume(TokenVariant.Operator, "+") then
 			return Node { variant = Variant.Add, data = { lhs, assert(expr(), "Expected rhs expression for addition") } }
@@ -131,21 +150,53 @@ local function parse(tokens)
 		return lhs
 	end
 
-	local stmt
-	local function block(no_bracket)
+	---@return Node
+	function block(no_bracket)
 		if not no_bracket then consume(TokenVariant.Operator, "{") end
 
 		local stmts = {}
 		while index < len do
 			if not no_bracket and optConsume(TokenVariant.Operator, "}") then break end
-			stmts[#stmts + 1] = assert(stmt(), "Failed to parse token " .. tostring(tokens[index]))
+			local item = stmt()
+			if not item then
+				item = expr()
+				if item then
+					stmts[#stmts + 1] = item
+					consume(TokenVariant.Operator, "}")
+					break -- Only last in block can be an expression
+				else
+					error("Failed to parse token " .. tostring(tokens[index]))
+				end
+			end
+			stmts[#stmts + 1] = item
 		end
 
-		return Node { variant = Variant.Block, data = stmts }
+		return Node { variant = Variant.Block, data = { false, stmts } }
+	end
+
+	---@return Node[]?
+	function arguments()
+		if optConsume(TokenVariant.Operator, "(") then
+			local args = {}
+			if optConsume(TokenVariant.Operator, ")") then
+				return args
+			end
+
+			repeat
+				args[#args + 1] = assert(expr(), "Expected argument for function call")
+			until not optConsume(TokenVariant.Operator, ",")
+
+			consume(TokenVariant.Operator, ")")
+			return args
+		end
 	end
 
 	function stmt()
-		if optConsume(TokenVariant.Keyword, "if") then
+		if optConsume(TokenVariant.Keyword, "const") then
+			local b = block()
+			b.data[1] = true
+			return b
+		elseif optConsume(TokenVariant.Keyword, "if") then
 			---@type { [1]: Node?, [2]: Node }
 			local chain = { { assert(expr(), "Expected expression after if statement"), block() } }
 
@@ -161,7 +212,8 @@ local function parse(tokens)
 			return Node { variant = Variant.If, data = chain }
 		elseif optConsume(TokenVariant.Keyword, "while") then
 			return Node { variant = Variant.While, data = { assert(expr(), "Expected expression for while loop"), block() } }
-		elseif optConsume(TokenVariant.Keyword, "fn") then
+		elseif (optConsume(TokenVariant.Keyword, "pub") and consume(TokenVariant.Keyword, "fn")) or optConsume(TokenVariant.Keyword, "fn") then
+			local pub = tokens[index - 2].data == "pub" -- Don't break elseif chain (kind of nasty)
 			local name = consume(TokenVariant.Identifier)
 			consume(TokenVariant.Operator, "(")
 
@@ -182,26 +234,23 @@ local function parse(tokens)
 		elseif optConsume(TokenVariant.Keyword, "let") then
 			local name = consume(TokenVariant.Identifier)
 			consume(TokenVariant.Operator, "=")
-			return Node { variant = Variant.Declare, data = { name.data, assert(expr(), "Expected expression for declaration of " .. name.data) } }
+			return Node { variant = Variant.Declare, data = { name.data, assert(expr(), "Expected expression for declaration of " .. name.data), false } }
+		elseif optConsume(TokenVariant.Keyword, "const") then
+			local name = consume(TokenVariant.Identifier)
+			consume(TokenVariant.Operator, "=")
+			return Node { variant = Variant.Declare, data = { name.data, assert(expr(), "Expected expression for const declaration of " .. name.data), true } }
 		else
 			local name = optConsume(TokenVariant.Identifier)
 			if name then
 				if optConsume(TokenVariant.Operator, "=") then
 					return Node { variant = Variant.Assign, data = { name.data, assert(expr(), "Expected expression for assignment of " .. name.data) } }
-				elseif optConsume(TokenVariant.Operator, "(") then
-					local arguments = {}
-					if optConsume(TokenVariant.Operator, ")") then
-						return Node { variant = Variant.Call, data = { name.data, arguments } }
-					end
-
-					repeat
-						arguments[#arguments + 1] = assert(expr(), "Expected argument for function call")
-					until not optConsume(TokenVariant.Operator, ",")
-
-					consume(TokenVariant.Operator, ")")
-					return Node { variant = Variant.Call, data = { name.data, arguments } }
 				else
-					index = index - 1 -- Expression
+					local args = arguments()
+					if args then
+						return Node { variant = Variant.Call, data = { name.data, args } }
+					else
+						index = index - 1 -- Expression
+					end
 				end
 			end
 		end

@@ -8,25 +8,24 @@ local Assembler = require "compiler.assembler"
 local lua = require "targets.lua"
 
 local tokens = Lexer.lex([[
-	// Hello, world!
-	let x = 5 + -2 * 2
-	let y = "dd" + "xyssz"
+	let std = const { import("std") }
 
-	if true {
-	} else if false {
-		let x = 4.2 + 3.2
-	} else {
-	}
+	fn foo() {}
 
-	while true && true {
-		let x = 22
-		let dd = "fffff"
-		x = 55
-	}
+	foo()
+
+	// let x = std.print
 ]])
 
+local handle = assert(io.open("src/targets/lua/std.simpl"), "Couldn't get std")
+local std = handle:read("*a")
+handle:close()
+
+local std_ir = Assembler.assemble(Parser.parse(Lexer.lex(std)))
+
 local ast = Parser.parse(tokens)
-local ir = Assembler.assemble(ast)
+local ir = Assembler.assemble(ast, { ["std"] = std_ir })
+
 local oir = Optimizer.optimize(ir)
 
 local out = io.open("foo.lua", "wb")

@@ -1,58 +1,64 @@
 local Assembler = require "compiler.assembler"
-local IR = Assembler.IR
-local IRDebugVariant, IRVariant = Assembler.DebugVariant, Assembler.Variant
+local IR, Variant = Assembler.IR, Assembler.Variant
 
----@param node Node
----@return string? ty, any? val
-local function eval(node)
-	local variant = node.variant
+local Type = require "compiler.assembler.type"
+local Natives, Fn = Type.Natives, Type.Fn
 
-	if variant == IRVariant.Literal then
-		return node.data[1], node.data[2]
-	elseif variant == IRVariant.Add then
-		local lhs_ty, lhs = eval(node.data[1])
-		local rhs_ty, rhs = eval(node.data[2])
+---@param ir IR
+---@return Type? ty, any? val
+local function eval(ir)
+	local variant, data = ir.variant, ir.data
+
+	if variant == Variant.Literal then
+		return ir.type, ir.const
+	elseif variant == Variant.Add then
+		local lhs_ty, lhs = eval(data[1])
+		local rhs_ty, rhs = eval(data[2])
 		if lhs and rhs and lhs_ty == rhs_ty then
-			if lhs_ty == "int" or lhs_ty == "float" then
+			if lhs_ty == Natives.integer or lhs_ty == Natives.float then
 				return lhs_ty, lhs + rhs
-			elseif lhs_ty == "string" then
+			elseif lhs_ty == Natives.string then
 				return lhs_ty, lhs .. rhs
 			end
 		end
-	elseif variant == IRVariant.Sub then
-		local lhs_ty, lhs = eval(node.data[1])
-		local rhs_ty, rhs = eval(node.data[2])
-		if lhs and rhs and lhs_ty == rhs_ty and lhs_ty == "int" or lhs_ty == "float" then
+	elseif variant == Variant.Sub then
+		local lhs_ty, lhs = eval(data[1])
+		local rhs_ty, rhs = eval(data[2])
+		if lhs and rhs and lhs_ty == rhs_ty and lhs_ty == Natives.integer or lhs_ty == Natives.float then
 			return lhs_ty, lhs - rhs
 		end
-	elseif variant == IRVariant.Mul then
-		local lhs_ty, lhs = eval(node.data[1])
-		local rhs_ty, rhs = eval(node.data[2])
-		if lhs and rhs and lhs_ty == rhs_ty and lhs_ty == "int" or lhs_ty == "float" then
+	elseif variant == Variant.Mul then
+		local lhs_ty, lhs = eval(data[1])
+		local rhs_ty, rhs = eval(data[2])
+		if lhs and rhs and lhs_ty == rhs_ty and lhs_ty == Natives.integer or lhs_ty == Natives.float then
 			return lhs_ty, lhs * rhs
 		end
-	elseif variant == IRVariant.Div then
-		local lhs_ty, lhs = eval(node.data[1])
-		local rhs_ty, rhs = eval(node.data[2])
-		if lhs and rhs and lhs_ty == rhs_ty and lhs_ty == "int" or lhs_ty == "float" then
+	elseif variant == Variant.Div then
+		local lhs_ty, lhs = eval(data[1])
+		local rhs_ty, rhs = eval(data[2])
+		if lhs and rhs and lhs_ty == rhs_ty and lhs_ty == Natives.integer or lhs_ty == Natives.float then
 			return lhs_ty, lhs / rhs
 		end
-	elseif variant == IRVariant.And then
-		local lhs_ty, lhs = eval(node.data[1])
-		local rhs_ty, rhs = eval(node.data[2])
-		if lhs ~= nil and rhs ~= nil and lhs_ty == rhs_ty and lhs_ty == "boolean" then
+	elseif variant == Variant.And then
+		local lhs_ty, lhs = eval(data[1])
+		local rhs_ty, rhs = eval(data[2])
+		if lhs ~= nil and rhs ~= nil and lhs_ty == rhs_ty and lhs_ty == Natives.boolean then
 			return lhs_ty, lhs and rhs
 		end
-	elseif variant == IRVariant.Or then
-		local lhs_ty, lhs = eval(node.data[1])
-		local rhs_ty, rhs = eval(node.data[2])
-		if lhs ~= nil and rhs ~= nil and lhs_ty == rhs_ty and lhs_ty == "boolean" then
+	elseif variant == Variant.Or then
+		local lhs_ty, lhs = eval(data[1])
+		local rhs_ty, rhs = eval(data[2])
+		if lhs ~= nil and rhs ~= nil and lhs_ty == rhs_ty and lhs_ty == Natives.boolean then
 			return lhs_ty, lhs or rhs
 		end
-	elseif variant == IRVariant.Negate then
-		local ty, val = eval(node.data)
-		if ty == "int" or ty == "float" then
+	elseif variant == Variant.Negate then
+		local ty, val = eval(data)
+		if ty == Natives.integer or ty == Natives.float then
 			return ty, -val
+		end
+	elseif variant == Variant.Scope then
+		if #data == 1 then -- Optimize to just the inner expression if block contains only one expression
+			ir.variant, ir.data = data[1].variant, data[1].data
 		end
 	end
 end
@@ -60,11 +66,20 @@ end
 ---@param module IR
 local function optimize(module)
 	---@param ir IR
+	local function expr(ir)
+		local variant, data = ir.variant, ir.data
+		if variant == Variant.Literal then
+			return ir
+		elseif variant == Variant then
+		end
+	end
+
+	---@param ir IR
 	local function stmt(ir)
 		local variant, data = ir.variant, ir.data
-		if variant == IRVariant.Module then
+		if variant == Variant.Module then
 			stmt(ir.data[2])
-		elseif variant == IRVariant.Scope then
+		elseif variant == Variant.Scope then
 			local d = {}
 			for k, ir in ipairs(data) do
 				if stmt(ir) ~= false then
@@ -72,7 +87,7 @@ local function optimize(module)
 				end
 			end
 			ir.data = d
-		elseif variant == IRVariant.If then
+		elseif variant == Variant.If then
 			local chain = {}
 			for i, val in ipairs(data) do
 				local cond, block = val[1], val[2]
@@ -81,7 +96,7 @@ local function optimize(module)
 					local ty, val = eval(cond)
 					if ty then
 						if val ~= false then
-							chain[#chain + 1] = { IR.new(IRVariant.Literal, { ty, val }), block }
+							chain[#chain + 1] = { IR.new(Variant.Literal, { ty, val }), block }
 						end
 					else
 						chain[#chain + 1] = val
@@ -91,25 +106,25 @@ local function optimize(module)
 				end
 			end
 			ir.data = chain
-		elseif variant == IRVariant.While then
+		elseif variant == Variant.While then
 			local ty, val = eval(data[1])
 			if ty then
 				if val ~= false then
 					-- Always true, todo: optimize condition out
-					data[1] = IR.new(IRVariant.Literal, {ty, val})
+					data[1] = IR.new(Variant.Literal, {ty, val})
 				else
 					return false -- Block does nothing.
 				end
 			end
-		elseif variant == IRVariant.Declare then
+		elseif variant == Variant.Declare then
 			local ty, val = eval(data[2])
 			if ty then
-				data[2] = IR.new(IRVariant.Literal, { ty, val })
+				data[2] = IR.new(Variant.Literal, { ty, val })
 			end
-		elseif variant == IRVariant.Assign then
+		elseif variant == Variant.Assign then
 			local ty, val = eval(data[2])
 			if ty then
-				data[2] = IR.new(IRVariant.Literal, { ty, val })
+				data[2] = IR.new(Variant.Literal, { ty, val })
 			end
 		end
 	end

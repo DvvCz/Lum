@@ -1,0 +1,4 @@
+// Todo: Mark as inline and variadic
+pub fn print(msg: string) {
+	const { __raw__emit("print(msg)") }
+}

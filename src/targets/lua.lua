@@ -1,5 +1,7 @@
-local ir = require "compiler.assembler"
-local IRVariant = ir.Variant
+local IR = require "compiler.assembler"
+local Type = require "compiler.assembler.type"
+
+local IRVariant, Natives = IR.Variant, Type.Natives
 
 ---@class Target
 ---@field name string
@@ -10,12 +12,25 @@ local Target = {
 	name = "Lua",
 
 	generate = function(ir)
+		local stmt
 		local function expr(ir)
 			local variant, data = ir.variant, ir.data
-			if variant == IRVariant.Literal then
-				---@type "int"|"float"|"string"|"boolean", number|boolean|string
+			if variant == IRVariant.Module then
+				local buf = {}
+				for i, ir in ipairs(data[2]) do
+					buf[i] = stmt(ir):gsub("\n", "\n")
+				end
+				return string.format("(function()\n%s\nend)()", table.concat(buf, "\n\t"))
+			elseif variant == IRVariant.Scope then
+				local buf, len = {}, #data
+				for i = 1, len - 1 do
+					buf[i] = stmt(data[i]):gsub("\n", "\n")
+				end
+				return string.format("(function()\n%s\n\treturn %s\nend)()", table.concat(buf, "\n\t"), expr(data[len]))
+			elseif variant == IRVariant.Literal then
+				---@type Type, number|boolean|string
 				local ty, val = data[1], data[2]
-				if ty == "string" then
+				if ty == Natives.string then
 					return string.format("%q", val)
 				elseif ty == val then
 					return val and "true" or "false"
@@ -24,6 +39,12 @@ local Target = {
 				end
 			elseif variant == IRVariant.Identifier then
 				return data
+			elseif variant == IRVariant.Call then
+				local args = {}
+				for k, arg in ipairs(data[2]) do
+					args[k] = expr(arg)
+				end
+				return string.format("%s(%s)", data[1], table.concat(args, ", "))
 			elseif variant == IRVariant.Add then
 				return string.format("(%s + %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Sub then
@@ -45,7 +66,7 @@ local Target = {
 
 		---@param ir IR
 		---@return string
-		local function stmt(ir)
+		function stmt(ir)
 			local variant, data = ir.variant, ir.data
 			if variant == IRVariant.Module then
 				---@type string, IR
