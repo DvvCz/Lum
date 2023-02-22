@@ -13,26 +13,25 @@ Luajit is fast enough, and works really well for writing small code, especially 
 ### Example?
 
 ```rs
-	// Hello, world!
-	let x = 5 + -2 * 2
-	let y = "dd" + "xyssz"
+// Hello, world!
+let x = 5 + -2 * 2
+let y = "dd" + "xyssz"
 
-	fn test(x: int, y: string, z: float) {
-	}
+fn test(x: int, y: string, z: float) {}
 
-	if true {
-		test(5, "", 3.14)
-	} else if false {
-		let x = 4.2 + 3.2
-	} else {
-		// std::print("Hello, world!") (Not implemented yet!)
-	}
+if true {
+	test(5, "", 3.14)
+} else if false {
+	let x = 4.2 + 3.2
+} else {
+	// std::print("Hello, world!") (Not implemented yet!)
+}
 
-	while true && true {
-		let x = 22
-		let dd = "fffff"
-		x = 55
-	}
+while true && true {
+	let x = 22
+	let dd = "fffff"
+	x = 55
+}
 ```
 
 This language isn't quite ready yet. It needs a standard library, online repl, and a name..
