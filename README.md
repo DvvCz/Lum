@@ -14,17 +14,19 @@ Luajit is fast enough, and works really well for writing small code, especially 
 
 ```rs
 // Hello, world!
+let std = const { import("std") }
+
 let x = 5 + -2 * 2
 let y = "dd" + "xyssz"
 
-fn test(x: int, y: string, z: float) {}
+fn test(x: integer, y: string, z: float) {}
 
 if true {
 	test(5, "", 3.14)
 } else if false {
 	let x = 4.2 + 3.2
 } else {
-	// std::print("Hello, world!") (Not implemented yet!)
+	// std.print("Hello, world!") (Not implemented yet!)
 }
 
 while true && true {
