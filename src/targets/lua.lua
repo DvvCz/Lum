@@ -1,4 +1,4 @@
-local IR = require "compiler.assembler"
+local IR = require "compiler.assembler.ir"
 local Type = require "compiler.assembler.type"
 
 local IRVariant, Natives = IR.Variant, Type.Natives
@@ -18,22 +18,21 @@ local Target = {
 			if variant == IRVariant.Module then
 				local buf = {}
 				for i, ir in ipairs(data[2]) do
-					buf[i] = stmt(ir):gsub("\n", "\n")
+					local r = stmt(ir)
+					if r ~= false then
+						buf[i] = r:gsub("\n", "\n")
+					end
 				end
 				return string.format("(function()\n%s\nend)()", table.concat(buf, "\n\t"))
-			elseif variant == IRVariant.Scope then
-				local buf, len = {}, #data
-				for i = 1, len - 1 do
-					buf[i] = stmt(data[i]):gsub("\n", "\n")
-				end
-				return string.format("(function()\n%s\n\treturn %s\nend)()", table.concat(buf, "\n\t"), expr(data[len]))
 			elseif variant == IRVariant.Literal then
 				---@type Type, number|boolean|string
 				local ty, val = data[1], data[2]
 				if ty == Natives.string then
 					return string.format("%q", val)
-				elseif ty == val then
+				elseif ty == Natives.boolean then
 					return val and "true" or "false"
+				elseif ty.variant == Type.Variant.Struct then
+					return "struct"
 				else
 					return tostring(val)
 				end
@@ -44,7 +43,7 @@ local Target = {
 				for k, arg in ipairs(data[2]) do
 					args[k] = expr(arg)
 				end
-				return string.format("%s(%s)", data[1], table.concat(args, ", "))
+				return string.format("(%s)(%s)", expr(data[1]), table.concat(args, ", "))
 			elseif variant == IRVariant.Add then
 				return string.format("(%s + %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Sub then
@@ -57,6 +56,10 @@ local Target = {
 				return string.format("(%s and %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Or then
 				return string.format("(%s or %s)", expr(data[1]), expr(data[2]))
+			elseif variant == IRVariant.Eq then
+				return string.format("(%s == %s)", expr(data[1]), expr(data[2]))
+			elseif variant == IRVariant.NotEq then
+				return string.format("(%s ~= %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Negate then
 				return string.format("-%s", expr(data))
 			else
@@ -75,7 +78,10 @@ local Target = {
 			elseif variant == IRVariant.Scope then
 				local buf = {}
 				for i, ir in ipairs(data) do
-					buf[i] = stmt(ir):gsub("\n", "\n\t")
+					local r = stmt(ir)
+					if r ~= false then
+						buf[#buf + 1] = stmt(ir):gsub("\n", "\n\t")
+					end
 				end
 				return "\t" .. table.concat(buf, "\n\t")
 			elseif variant == IRVariant.If then
@@ -99,10 +105,11 @@ local Target = {
 				for k, param in ipairs(data[3]) do
 					param_names[k] = param[1]
 				end
-				return string.format("local function %s(%s)\n%s\nend", data[2], table.concat(param_names, ", "), stmt(data[3]))
+				return string.format("local function %s(%s)\n%s\nend", data[2], table.concat(param_names, ", "), stmt(data[4]))
 			elseif variant == IRVariant.Return then
 				return string.format("return %s", expr(data))
 			elseif variant == IRVariant.Declare then
+				if data[1] then return false end
 				return string.format("local %s = %s", data[2], expr(data[3]))
 			elseif variant == IRVariant.Assign then
 				return string.format("%s = %s", data[1], expr(data[2]))
@@ -111,10 +118,11 @@ local Target = {
 				for k, arg in ipairs(data[2]) do
 					args[k] = expr(arg)
 				end
-				return string.format("%s(%s)", data[1], table.concat(args, ", "))
+				return string.format("(%s)(%s)", expr(data[1]), table.concat(args, ", "))
+			elseif variant == IRVariant.Emit then
+				return data
 			else
-				-- error("Unimplemented stmt: " .. (variant or "???"))
-				return "tired"
+				error("Unimplemented stmt: " .. (variant or "???"))
 			end
 		end
 

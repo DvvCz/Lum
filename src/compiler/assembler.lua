@@ -45,12 +45,13 @@ end
 
 local INTRINSICS = {
 	Type = Struct {
-		emit = Fn({Natives.string}, Natives.void, true)
+		emit = Fn({Natives.string}, Natives.ir, true)
 	},
 
 	Value = {
 		emit = function(args) -- do nothing, interpreter.
 			local code = args[1]
+			return IR.new(Variant.Emit, code)
 		end
 	}
 }
@@ -61,7 +62,7 @@ local INTRINSICS = {
 local function assemble(ast, imports)
 	imports = imports or {}
 
-	imports.intrinsics = IR.new(Variant.Literal, { [2] = INTRINSICS.Value }, INTRINSICS.Type)
+	imports.intrinsics = IR.new(Variant.Literal, { [1] = INTRINSICS.Type, [2] = INTRINSICS.Value }, INTRINSICS.Type)
 
 	---@type IR[] # Injected ir into header for import reuse
 	local header = {}
@@ -97,7 +98,6 @@ local function assemble(ast, imports)
 	local core = Scope.new() -- compiler -> core -> std
 
 	core.vars.import = IR.Variable.new(Fn({Natives.string}, Natives.ir, true))
-	core.vars.__raw__emit = IR.Variable.new(Fn({Natives.string}, Natives.ir), true)
 
 	local current = Scope.new(core)
 
@@ -118,24 +118,24 @@ local function assemble(ast, imports)
 			current.can_return = true
 			return assembleNode(data)
 		elseif variant == NodeVariant.Block then
-			local const, nodes = data[1], data[2]
 			local items = scope(function(scope)
-				scope.const = const
 				local items = {} ---@type IR[]
-				for i, item in ipairs(nodes) do
+				for i, item in ipairs(data) do
 					if scope.dead then
 						print("Warning: Dead code on ", item)
 						break
 					else
-						items[i] = assembleNode(item)
+						local r = assembleNode(item)
+						if r ~= false then
+							items[#items + 1] = r
+						end
 						-- print("dead?", scope.dead, items[i])
 					end
 				end
 				return items
 			end)
 
-			local ret = items[#items] and items[#items].type or Natives.void
-			return IR.new(Variant.Scope, items, ret)
+			return IR.new(Variant.Scope, items)
 		elseif variant == NodeVariant.If then
 			local chain = {}
 			for i, if_else_if in ipairs(data) do
@@ -189,6 +189,7 @@ local function assemble(ast, imports)
 			local const, name, expr = data[1], data[2], assembleNode(data[3])
 			assert(not current.vars[name], "Cannot re-declare existing variable " .. name)
 
+			assert(expr.type ~= Natives.void, "Cannot assign value of void to variable " .. name)
 			current.vars[name] = IR.Variable.new(expr.type, const)
 
 			local decl = IR.new(Variant.Declare, { const, name, expr })
@@ -209,34 +210,27 @@ local function assemble(ast, imports)
 			assert(fn.type.variant == Type.Variant.Function, "Cannot call variable of type " .. tostring(fn.type))
 
 			if fn.type.union.const then
-				-- assert(current:attr("const"), "Cannot call constant fn (" .. data[1] .. ") outside of constant context")
-
 				---@type any[], Type[]
 				local args, argtypes = {}, {}
 				for k, arg in ipairs(data[2]) do
 					local ir = assembleNode(arg)
-					assert(ir.const, "Cannot call constant function (" .. tostring(fn.type) .. ") with runtime argument (" .. tostring(arg) .. ")")
-					args[k], argtypes[k] = ir.const, ir.type
+					-- assert(ir.const, "Cannot call constant function (" .. tostring(fn.type) .. ") with runtime argument (" .. tostring(arg) .. ")")
+					args[k], argtypes[k] = ir, ir.type
 				end
 
 				local got = Fn(argtypes, Natives.any)
 				assert(fn.type == got, "Calling constant function with incorrect parameters: Expected " .. tostring(fn.type) .. ", got " .. tostring(got))
 
-				local args = {}
-				for k, arg in ipairs(data[2]) do
-					args[k] = assembleNode(arg)
-				end
-
 				local ir = IR.new(Variant.Call, { fn, args })
 				local val = const_rt:eval(ir)
 
 				if fn.type.union.ret == Natives.ir then
-					return assert(val, "??")
+					return assert(val, "Constant function (" .. tostring(fn.type) .. ") expecting return of ir returned nothing")
 				else
 					return IR.new(Variant.Literal, { fn.type.union.ret, val }, fn.type.union.ret)
 				end
 			else
-				assert(not current:attr("const"), "Cannot call non-constant fn (" .. tostring(fn.type) .. ") in constant context")
+				assert(not select(2, current:attr("const")), "Cannot call non-constant fn (" .. tostring(fn.type) .. ") in constant context")
 
 				local args, argtypes = {}, {}
 				for k, arg in ipairs(data[2]) do
@@ -261,7 +255,13 @@ local function assemble(ast, imports)
 			local lhs, rhs = assembleNode(data[1]), assembleNode(data[2])
 			assert(lhs.type == rhs.type, "Cannot add differing types (" .. tostring(lhs.type) .. " and " .. tostring(rhs.type) .. ")")
 			assert(lhs.type == Natives.string or lhs.type == Natives.integer or lhs.type == Natives.float, "Cannot add type: " .. tostring(lhs.type))
-			return IR.new(Variant.Add, { lhs, rhs }, lhs.type, current:attr("const") and (lhs.const + rhs.const))
+
+			local ir = IR.new(Variant.Add, { lhs, rhs }, lhs.type)
+			if select(2, current:attr("const")) then
+				return IR.new(Variant.Literal, { lhs.type, const_rt:eval(ir) })
+			end
+
+			return ir
 		elseif variant == NodeVariant.Sub then
 			local lhs, rhs = assembleNode(data[1]), assembleNode(data[2])
 			assert(lhs.type == rhs.type, "Cannot subtract differing types (" .. tostring(lhs.type) .. " and " .. tostring(rhs.type) .. ")")
@@ -292,6 +292,13 @@ local function assemble(ast, imports)
 		elseif variant == NodeVariant.Literal then
 			local ty = Type.from(data[1])
 			return IR.new(Variant.Literal, { ty, data[2] }, ty, data[2])
+		elseif variant == NodeVariant.Struct then
+			local fields = {}
+			for key, value in ipairs(data) do
+				fields[key] = assembleNode(value)
+			end
+
+			return IR.new(Variant.Struct, fields)
 		elseif variant == NodeVariant.Identifier then ---@cast data string
 			local var = assert(current:find(data), "Variable " .. data .. " does not exist")
 			return IR.new(Variant.Identifier, data, var.type, var.val)

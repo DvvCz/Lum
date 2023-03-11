@@ -138,7 +138,11 @@ function Interpreter:eval(ir)
 	elseif variant == Variant.Negate then
 		return -self:eval(data)
 	elseif variant == Variant.Add then
-		return self:eval(data[1]) + self:eval(data[2])
+		if data[1].type == Natives.string then
+			return self:eval(data[1]) .. self:eval(data[2])
+		else
+			return self:eval(data[1]) + self:eval(data[2])
+		end
 	elseif variant == Variant.Sub then
 		return self:eval(data[1]) - self:eval(data[2])
 	elseif variant == Variant.Mul then

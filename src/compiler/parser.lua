@@ -27,9 +27,12 @@ local Variant = {
 	And = 16,
 	Or = 17,
 
-	Literal = 18, -- "" 22 22.0
-	Struct = 19,
-	Identifier = 20
+	Eq = 18,
+	NotEq = 19,
+
+	Literal = 19, -- "" 22 22.0
+	Struct = 20,
+	Identifier = 21
 }
 
 local DebugVariant = {}
@@ -127,10 +130,19 @@ local function parse(tokens)
 		end
 
 		if optConsume(TokenVariant.Operator, "{") then
-			local struct = {}
+			local fields = {}
 			if optConsume(TokenVariant.Operator, "}") then
-				return Node { variant = Variant.Struct,  }
+				return Node { variant = Variant.Struct, data = fields }
 			end
+
+			repeat
+				local key = consume(TokenVariant.Identifier)
+				fields[#fields + 1] = {key, assert(expr(), "Expected expression for struct field")}
+			until not optConsume(TokenVariant.Operator, ",")
+
+			consume(TokenVariant.Operator, "}")
+
+			return Node { variant = Variant.Struct, data = fields }
 		end
 
 		if not lhs then return end
@@ -154,9 +166,13 @@ local function parse(tokens)
 		elseif optConsume(TokenVariant.Operator, "/") then
 			return Node { variant = Variant.Div, data = { lhs, assert(expr(), "Expected rhs expression for division") } }
 		elseif optConsume(TokenVariant.Operator, "&&") then
-			return Node { variant = Variant.And, data = { lhs, assert(expr(), "Expected rhs expression for AND") } }
+			return Node { variant = Variant.And, data = { lhs, assert(expr(), "Expected expression after &&") } }
 		elseif optConsume(TokenVariant.Operator, "||") then
-			return Node { variant = Variant.Or, data = { lhs, assert(expr(), "Expected rhs expression for OR") } }
+			return Node { variant = Variant.Or, data = { lhs, assert(expr(), "Expected expression after ||") } }
+		elseif optConsume(TokenVariant.Operator, "==") then
+			return Node { variant = Variant.Eq, data = { lhs, assert(expr(), "Expected expression after ==") } }
+		elseif optConsume(TokenVariant.Operator, "!=") then
+			return Node { variant = Variant.NotEq, data = { lhs, assert(expr(), "Expected expression after !=") } }
 		end
 
 		return lhs
@@ -173,12 +189,11 @@ local function parse(tokens)
 			if not item then
 				item = assert(expr(), "Failed to parse token " .. tostring(tokens[index]))
 				assert(item.variant == Variant.Call, "Cannot use expression in statement position")
-				stmts[#stmts + 1] = item
 			end
 			stmts[#stmts + 1] = item
 		end
 
-		return Node { variant = Variant.Block, data = { false, stmts } }
+		return Node { variant = Variant.Block, data = stmts }
 	end
 
 	---@return Node[]?
@@ -231,7 +246,7 @@ local function parse(tokens)
 
 				local params = {}
 				if optConsume(TokenVariant.Operator, ")") then
-					return Node { variant = Variant.Fn, data = { name.data, params, block() } }
+					return Node { variant = Variant.Fn, data = { { const = const }, name.data, params, block() } }
 				end
 
 				repeat
@@ -242,7 +257,7 @@ local function parse(tokens)
 				until not optConsume(TokenVariant.Operator, ",")
 
 				consume(TokenVariant.Operator, ")")
-				return Node { variant = Variant.Fn, data = { { pub = pub, const = const }, name.data, params, block() } }
+				return Node { variant = Variant.Fn, data = { { const = const }, name.data, params, block() } }
 			elseif const then -- const x = 5 (variable in const interpreter)
 				local name = optConsume(TokenVariant.Identifier)
 				if name then
@@ -262,7 +277,7 @@ local function parse(tokens)
 				else
 					local args = arguments()
 					if args then
-						return Node { variant = Variant.Call, data = { name.data, args } }
+						return Node { variant = Variant.Call, data = { Node { variant = Variant.Identifier, data = name.data }, args } }
 					else
 						index = index - 1 -- Expression
 					end

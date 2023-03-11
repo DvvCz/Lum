@@ -40,6 +40,8 @@ IR.Variable = IRVariable
 
 ---@enum IRVariant
 IR.Variant = {
+	Emit = -1, -- Used by the compiler `emit` intrinsic.
+
 	Module = 1,
 	Scope = 2,
 
@@ -64,8 +66,12 @@ IR.Variant = {
 	And = 16,
 	Or = 17,
 
-	Literal = 18, -- "" 22 22.0
-	Identifier = 19
+	Eq = 18,
+	NotEq = 19,
+
+	Literal = 20, -- "" 22 22.0
+	Struct = 21,
+	Identifier = 22
 }
 
 return IR
