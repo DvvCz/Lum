@@ -6,27 +6,38 @@ It currently compiles to these languages:
 * `Lua`
 * ~~`JVM` (Not quite implemented)~~
 
-### Why lua?
+### Why?
 
-Luajit is fast enough, and works really well for writing small code, especially for parsing. (The parser and tokenizer are <500 lines of code!). It will eventually be bootstrapped.
+There's a severe lack of competition for a streamlined language that can compile / transpile to several targets.
+
+The current biggest language for this case is [Haxe](https://github.com/HaxeFoundation/haxe). But many targets are slow and unmaintained, due to the compiler not being bootstrapped.
 
 ### Example?
 
+This isn't quite functional but is a preview of what I want the language to look like.
+
 ```rs
-// Hello, world!
-let std = const { import("std") }
+// `const` in this case means "compile time", not immutability.
+const std = import("std")
+const intrinsics = import("intrinsics")
 
 let x = 5 + -2 * 2
 let y = "dd" + "xyssz"
 
-fn test(x: integer, y: string, z: float) {}
+fn test(x: integer, y: string, z: float) {
+	if intrinsics.target() == "lua" {
+		intrinsics.emit("print(x, y, z)")
+	} else {
+		intrinsics.emit("unimplemented")
+	}
+}
 
 if true {
 	test(5, "", 3.14)
 } else if false {
 	let x = 4.2 + 3.2
 } else {
-	// std.print("Hello, world!") (Not implemented yet!)
+	std.print("Hello, world!")
 }
 
 while true && true {
@@ -35,6 +46,12 @@ while true && true {
 	x = 55
 }
 ```
+
+### Why lua?
+
+Luajit is fast enough, and works really well for writing small code, especially for parsing. (The parser and tokenizer are <500 lines of code!). It will eventually be bootstrapped.
+
+### Status?
 
 This language isn't quite ready yet. It needs a standard library, online repl, and a name..
 Come back later!
