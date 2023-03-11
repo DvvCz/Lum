@@ -13,14 +13,11 @@ local Variant = {
 }
 
 local Keywords = {
-	["if"] = true,
-	["else"] = true,
-	["while"] = true,
-	["for"] = true,
-	["let"] = true,
-	["fn"] = true,
+	["if"] = true, ["else"] = true,
+	["while"] = true, ["for"] = true,
 
-	["use"] = true, ["pub"] = true, ["export"] = true,
+	["let"] = true,
+	["fn"] = true, ["return"] = true,
 
 	["const"] = true, -- compile time block
 }

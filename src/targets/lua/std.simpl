@@ -1,4 +1,14 @@
-// Todo: Mark as inline and variadic
-pub fn print(msg: string) {
-	const { __raw__emit("print(msg)") }
+const intrinsics = import("intrinsics")
+
+// Should be inlined as an optimization.
+// Variadic parameters would be good in the future.
+fn print(msg: string) {
+	// Proof of concept. Don't know if externs will be a thing.
+	intrinsics.emit("print(msg)")
 }
+
+// const number = struct { num: integer }
+// let x = number {}
+
+// Equivalent to return std { ... } with types already inferred.
+return 5

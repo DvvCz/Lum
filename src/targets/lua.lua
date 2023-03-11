@@ -60,7 +60,7 @@ local Target = {
 			elseif variant == IRVariant.Negate then
 				return string.format("-%s", expr(data))
 			else
-				error("Unimplemented expression: " .. variant)
+				error("Unimplemented expression: " .. tostring(variant))
 			end
 		end
 
@@ -96,12 +96,14 @@ local Target = {
 				return string.format("while %s do\n%s\nend", expr(data[1]), stmt(data[2]))
 			elseif variant == IRVariant.Fn then
 				local param_names = {}
-				for k, param in ipairs(data[2]) do
+				for k, param in ipairs(data[3]) do
 					param_names[k] = param[1]
 				end
-				return string.format("local function %s(%s)\n%s\nend", data[1], table.concat(param_names, ", "), stmt(data[3]))
+				return string.format("local function %s(%s)\n%s\nend", data[2], table.concat(param_names, ", "), stmt(data[3]))
+			elseif variant == IRVariant.Return then
+				return string.format("return %s", expr(data))
 			elseif variant == IRVariant.Declare then
-				return string.format("local %s = %s", data[1], expr(data[2]))
+				return string.format("local %s = %s", data[2], expr(data[3]))
 			elseif variant == IRVariant.Assign then
 				return string.format("%s = %s", data[1], expr(data[2]))
 			elseif variant == IRVariant.Call then
@@ -111,7 +113,8 @@ local Target = {
 				end
 				return string.format("%s(%s)", data[1], table.concat(args, ", "))
 			else
-				error("Unimplemented stmt: " .. variant)
+				-- error("Unimplemented stmt: " .. (variant or "???"))
+				return "tired"
 			end
 		end
 

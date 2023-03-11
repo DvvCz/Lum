@@ -5,14 +5,30 @@ local Parser = require "compiler.parser"
 local Optimizer = require "compiler.optimizer"
 local Assembler = require "compiler.assembler"
 
+local Interpreter = require "compiler.interpreter"
+
 local lua = require "targets.lua"
 
 local tokens = Lexer.lex([[
-	let std = const { import("std") }
+	const intrinsics = import("intrinsics")
 
-	fn foo() {}
+	intrinsics.emit("foo")
 
-	foo()
+	// let x = 5
+	// return test(5)
+
+	// let x = intrinsics.emit
+	// let y = x("f")
+
+	// const foo = struct {
+	// 	y: i32
+	// }
+
+	// let x = foo {
+	// 	y: 1
+	// }
+
+	// let x = 5 + 26 * 63
 
 	// let x = std.print
 ]])
@@ -27,6 +43,13 @@ local ast = Parser.parse(tokens)
 local ir = Assembler.assemble(ast, { ["std"] = std_ir })
 
 local oir = Optimizer.optimize(ir)
+
+local x = Interpreter.new():build()
+x:eval(oir)
+
+for k, v in pairs(x.scope.vars) do
+	print("out", k, v.emit)
+end
 
 local out = io.open("foo.lua", "wb")
 out:write(lua.generate(oir))

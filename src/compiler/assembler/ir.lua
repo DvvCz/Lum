@@ -1,0 +1,71 @@
+local Type = require "compiler.assembler.type"
+local Natives, Fn, Struct = Type.Natives, Type.Fn, Type.Struct
+
+---@class IR
+---@field variant IRVariant
+---@field data any
+---@field type Type
+---@field is_const boolean
+---@field const any
+local IR = {}
+IR.__index = IR
+
+function IR:__tostring()
+	return "IR " .. self.variant
+end
+
+---@param variant IRVariant
+---@param data any
+---@param type Type?
+---@param const any
+function IR.new(variant, data, type, const)
+	return setmetatable({ variant = variant, data = data, type = type or Natives.void, const = const }, IR)
+end
+
+---@class IRVariable
+---@field val any? # The value of the variable, if it could be deduced at compile time.
+---@field type Type # Type of the variable (ie "integer")
+---@field const boolean?
+local IRVariable = {}
+IRVariable.__index = IRVariable
+
+---@param type Type
+---@param const boolean?
+---@param val any
+function IRVariable.new(type, const, val)
+	return setmetatable({ type = type, const = const, val = val }, IRVariable)
+end
+
+IR.Variable = IRVariable
+
+---@enum IRVariant
+IR.Variant = {
+	Module = 1,
+	Scope = 2,
+
+	If = 3,
+	While = 4,
+	Fn = 5,
+	Return = 6,
+
+	Declare = 7,
+	Assign = 8,
+
+	Call = 9,
+	Index = 10,
+
+	Negate = 11,
+
+	Add = 12,
+	Sub = 13,
+	Mul = 14,
+	Div = 15,
+
+	And = 16,
+	Or = 17,
+
+	Literal = 18, -- "" 22 22.0
+	Identifier = 19
+}
+
+return IR

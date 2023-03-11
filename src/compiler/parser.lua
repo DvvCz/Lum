@@ -3,28 +3,33 @@ local TokenDebugVariant, TokenVariant = lexer.DebugVariant, lexer.Variant
 
 ---@enum NodeVariant
 local Variant = {
-	Block = 1, -- {} (or top level)
-	If = 2, -- if <exp> {}
-	While = 3, -- while <exp> {}
-	Fn = 4, -- fn <name>((<NAME>:<TYPE>),*) {}
+	Module = 1, -- Top level
 
-	Declare = 5, -- let x = 5
-	Assign = 6, -- x = 5
+	Block = 2, -- {}
+	If = 3, -- if <exp> {}
+	While = 4, -- while <exp> {}
+	Fn = 5, -- fn <name>((<NAME>:<TYPE>),*) {}
+	Return = 6, -- return <exp>?
 
-	Call = 7,
+	Declare = 7, -- let x = 5
+	Assign = 8, -- x = 5
 
-	Negate = 8,
+	Call = 9,
+	Index = 10,
 
-	Add = 9,
-	Sub = 10,
-	Mul = 11,
-	Div = 12,
+	Negate = 11,
 
-	And = 13,
-	Or = 14,
+	Add = 12,
+	Sub = 13,
+	Mul = 14,
+	Div = 15,
 
-	Literal = 15, -- "" 22 22.0
-	Identifier = 16
+	And = 16,
+	Or = 17,
+
+	Literal = 18, -- "" 22 22.0
+	Struct = 19,
+	Identifier = 20
 }
 
 local DebugVariant = {}
@@ -121,17 +126,24 @@ local function parse(tokens)
 			lhs = prim()
 		end
 
+		if optConsume(TokenVariant.Operator, "{") then
+			local struct = {}
+			if optConsume(TokenVariant.Operator, "}") then
+				return Node { variant = Variant.Struct,  }
+			end
+		end
+
 		if not lhs then return end
+
+		while optConsume(TokenVariant.Operator, ".") do
+			local rest = consume(TokenVariant.Identifier)
+			lhs = Node { variant = Variant.Index, data = { lhs, rest.data } }
+		end
 
 		local args = arguments()
 		if args then
-			return Node { variant = Variant.Call, data = { lhs.data, args } }
+			lhs = Node { variant = Variant.Call, data = { lhs, args } }
 		end
-
-		--[[if optConsume(TokenVariant.Operator, ".") then
-				local rest = 
-			end
-		end]]
 
 		if optConsume(TokenVariant.Operator, "+") then
 			return Node { variant = Variant.Add, data = { lhs, assert(expr(), "Expected rhs expression for addition") } }
@@ -159,14 +171,9 @@ local function parse(tokens)
 			if not no_bracket and optConsume(TokenVariant.Operator, "}") then break end
 			local item = stmt()
 			if not item then
-				item = expr()
-				if item then
-					stmts[#stmts + 1] = item
-					consume(TokenVariant.Operator, "}")
-					break -- Only last in block can be an expression
-				else
-					error("Failed to parse token " .. tostring(tokens[index]))
-				end
+				item = assert(expr(), "Failed to parse token " .. tostring(tokens[index]))
+				assert(item.variant == Variant.Call, "Cannot use expression in statement position")
+				stmts[#stmts + 1] = item
 			end
 			stmts[#stmts + 1] = item
 		end
@@ -192,11 +199,7 @@ local function parse(tokens)
 	end
 
 	function stmt()
-		if optConsume(TokenVariant.Keyword, "const") then
-			local b = block()
-			b.data[1] = true
-			return b
-		elseif optConsume(TokenVariant.Keyword, "if") then
+		if optConsume(TokenVariant.Keyword, "if") then
 			---@type { [1]: Node?, [2]: Node }
 			local chain = { { assert(expr(), "Expected expression after if statement"), block() } }
 
@@ -212,34 +215,46 @@ local function parse(tokens)
 			return Node { variant = Variant.If, data = chain }
 		elseif optConsume(TokenVariant.Keyword, "while") then
 			return Node { variant = Variant.While, data = { assert(expr(), "Expected expression for while loop"), block() } }
-		elseif (optConsume(TokenVariant.Keyword, "pub") and consume(TokenVariant.Keyword, "fn")) or optConsume(TokenVariant.Keyword, "fn") then
-			local pub = tokens[index - 2].data == "pub" -- Don't break elseif chain (kind of nasty)
-			local name = consume(TokenVariant.Identifier)
-			consume(TokenVariant.Operator, "(")
-
-			local params = {}
-			if optConsume(TokenVariant.Operator, ")") then
-				return Node { variant = Variant.Fn, data = { name.data, params, block() } }
-			end
-
-			repeat
-				local name = consume(TokenVariant.Identifier)
-				consume(TokenVariant.Operator, ":")
-				local ty = consume(TokenVariant.Identifier)
-				params[#params + 1] = { name.data, ty.data }
-			until not optConsume(TokenVariant.Operator, ",")
-
-			consume(TokenVariant.Operator, ")")
-			return Node { variant = Variant.Fn, data = { name.data, params, block() } }
 		elseif optConsume(TokenVariant.Keyword, "let") then
 			local name = consume(TokenVariant.Identifier)
 			consume(TokenVariant.Operator, "=")
-			return Node { variant = Variant.Declare, data = { name.data, assert(expr(), "Expected expression for declaration of " .. name.data), false } }
-		elseif optConsume(TokenVariant.Keyword, "const") then
-			local name = consume(TokenVariant.Identifier)
-			consume(TokenVariant.Operator, "=")
-			return Node { variant = Variant.Declare, data = { name.data, assert(expr(), "Expected expression for const declaration of " .. name.data), true } }
+			return Node { variant = Variant.Declare, data = { false, name.data, assert(expr(), "Expected expression for declaration of " .. name.data) } }
+		elseif optConsume(TokenVariant.Keyword, "return") then
+			return Node { variant = Variant.Return, data = expr() or consume(TokenVariant.Operator, "}") }
 		else
+			local before = index
+			local const = optConsume(TokenVariant.Keyword, "const")
+
+			if (const and optConsume(TokenVariant.Keyword, "fn")) or optConsume(TokenVariant.Keyword, "fn") then
+				local name = consume(TokenVariant.Identifier)
+				consume(TokenVariant.Operator, "(")
+
+				local params = {}
+				if optConsume(TokenVariant.Operator, ")") then
+					return Node { variant = Variant.Fn, data = { name.data, params, block() } }
+				end
+
+				repeat
+					local name = consume(TokenVariant.Identifier)
+					consume(TokenVariant.Operator, ":")
+					local ty = consume(TokenVariant.Identifier)
+					params[#params + 1] = { name.data, ty.data }
+				until not optConsume(TokenVariant.Operator, ",")
+
+				consume(TokenVariant.Operator, ")")
+				return Node { variant = Variant.Fn, data = { { pub = pub, const = const }, name.data, params, block() } }
+			elseif const then -- const x = 5 (variable in const interpreter)
+				local name = optConsume(TokenVariant.Identifier)
+				if name then
+					consume(TokenVariant.Operator, "=")
+					return Node { variant = Variant.Declare, data = { true, name.data, assert(expr(), "Expected expression for const declaration") } }
+				else
+					index = before
+				end
+			else
+				index = before
+			end
+
 			local name = optConsume(TokenVariant.Identifier)
 			if name then
 				if optConsume(TokenVariant.Operator, "=") then
@@ -256,7 +271,7 @@ local function parse(tokens)
 		end
 	end
 
-	return block(true)
+	return Node { variant = Variant.Module, data = block(true) }
 end
 
 return {
