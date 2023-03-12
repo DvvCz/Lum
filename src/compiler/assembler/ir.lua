@@ -31,9 +31,8 @@ IRVariable.__index = IRVariable
 
 ---@param type Type
 ---@param const boolean?
----@param val any
-function IRVariable.new(type, const, val)
-	return setmetatable({ type = type, const = const, val = val }, IRVariable)
+function IRVariable.new(type, const)
+	return setmetatable({ type = type, const = const }, IRVariable)
 end
 
 IR.Variable = IRVariable
@@ -70,8 +69,11 @@ IR.Variant = {
 	NotEq = 19,
 
 	Literal = 20, -- "" 22 22.0
-	Struct = 21,
-	Identifier = 22
+
+	StructInstance = 21,
+	Struct = 22,
+
+	Identifier = 23
 }
 
 return IR

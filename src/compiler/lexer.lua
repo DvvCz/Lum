@@ -19,6 +19,8 @@ local Keywords = {
 	["let"] = true,
 	["fn"] = true, ["return"] = true,
 
+	["enum"] = true, ["struct"] = true,
+
 	["const"] = true, -- compile time block
 }
 

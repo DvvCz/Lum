@@ -67,9 +67,11 @@ end
 ---@return any? # Value if ir is an expression
 function Interpreter:eval(ir)
 	local variant, data = ir.variant, ir.data
+	self.scope.returning = true
 
 	if variant == Variant.Module then ---@cast data { [1]: string, [2]: IR }
-		return self:eval(data[2])
+		self:eval(data[2])
+		return self.__returnvalue__
 	elseif variant == Variant.Scope then ---@cast data IR[]
 		local scope = InterpreterScope.new(self.scope)
 		self.scope = scope
@@ -78,11 +80,12 @@ function Interpreter:eval(ir)
 
 		if scope:attr("returning") then
 			for _, ir in ipairs(data) do
+				self:eval(ir)
 				if self.__return__ then
 					self.__return__ = false
+					print("ret, returning", self.__returnvalue__)
 					return self.__returnvalue__
 				end
-				self:eval(ir)
 			end
 		else
 			for _, ir in ipairs(data) do
@@ -123,7 +126,8 @@ function Interpreter:eval(ir)
 		self.__return__ = true
 		self.__returnvalue__ = self:eval(data)
 	elseif variant == Variant.Declare then
-		self.scope.vars[data[2]] = assert(self:eval(data[3]), "Cannot set to nil")
+		local v = self:eval(data[3])
+		self.scope.vars[data[2]] = assert(v, "Cannot set to nil")
 	elseif variant == Variant.Assign then
 		self.scope.vars[data[1]] = self:eval(data[2])
 	elseif variant == Variant.Call then
@@ -155,6 +159,10 @@ function Interpreter:eval(ir)
 		return self:eval(data[1]) or self:eval(data[2])
 	elseif variant == Variant.Literal then ---@cast data { [1]: any }
 		return data[2]
+	elseif variant == Variant.Struct then --- @cast data table<string, Type>
+		return data
+	elseif variant == Variant.StructInstance then ---@cast data { [1]: Type, [2]: table<string, IR> }
+		return data
 	elseif variant == Variant.Identifier then
 		return assert(self.scope:find(data), "Couldn't find variable " .. data)
 	end

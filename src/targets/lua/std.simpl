@@ -11,4 +11,6 @@ fn print(msg: string) {
 // let x = number {}
 
 // Equivalent to return std { ... } with types already inferred.
-return 5
+return {
+	print = print
+}

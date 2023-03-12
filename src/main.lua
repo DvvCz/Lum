@@ -10,17 +10,18 @@ local Interpreter = require "compiler.interpreter"
 local lua = require "targets.lua"
 
 local tokens = Lexer.lex([[
-	const intrinsics = import("intrinsics")
-	const emit = intrinsics.emit
+	const std = import("std")
+	const T = integer
 
-	const y = "foo"
-	fn test(x: integer) {
-		emit("print(x)" + y)
+	const XYZ = struct {
+		x: T
 	}
 
-	let x = 5
+	fn test() {
+		const y = std.print
+	}
 
-	test(5)
+	return { x = test, y = 23 }
 ]])
 
 local handle = assert(io.open("src/targets/lua/std.simpl"), "Couldn't get std")

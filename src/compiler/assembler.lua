@@ -7,7 +7,7 @@ local IR = require "compiler.assembler.ir"
 local Variant = IR.Variant
 
 local Type = require "compiler.assembler.type"
-local Natives, Fn, Struct = Type.Natives, Type.Fn, Type.Struct
+local Natives, Fn, Struct, Ty = Type.Natives, Type.Fn, Type.Struct, Type.Ty
 
 local Interpreter = require "compiler.interpreter"
 
@@ -16,8 +16,9 @@ local Interpreter = require "compiler.interpreter"
 ---@field parent Scope?
 ---@field const boolean
 ---@field dead boolean
----@field can_return boolean
----@field returned IR
+---@field fn boolean
+---@field module boolean
+---@field returned IR? # ir for if scope.fn or scope.module are defined and there was a return value.
 local Scope = {}
 Scope.__index = Scope
 
@@ -70,7 +71,8 @@ local function assemble(ast, imports)
 	---@type table<string, IR>
 	local import_cache = {}
 
-	local const_rt = Interpreter.new()
+	local const_rt
+	const_rt = Interpreter.new()
 		:withVariables({
 			__importintrinsics = INTRINSICS.Value,
 			import = function(args)
@@ -82,22 +84,39 @@ local function assemble(ast, imports)
 
 				if imports[path] then
 					local module = imports[path]
-					header[#header + 1] = IR.new(Variant.Declare, {true, "__import" .. path, module})
 
-					local ref = IR.new(Variant.Identifier, "__import" .. path, module.type, module.const)
+					local ir = IR.new(Variant.Declare, {false, "__import" .. path, module})
+					header[#header + 1] = ir
+					--[[const_rt:eval(ir)]]
+
+					--[[local ref = IR.new(Variant.Identifier, "__import" .. path, module.type, module.const)
 					import_cache[path] = ref
 
-					return ref
+					print(path, ref)]]
+
+					return module
 				end
 
 				error("Couldn't find module '" .. tostring(path) .. "'")
-			end
+			end,
+
+			integer = Natives.integer,
+			boolean = Natives.boolean,
+			float = Natives.float,
+			string = Natives.string,
+			void = Natives.void
 		})
 		:build()
 
 	local core = Scope.new() -- compiler -> core -> std
 
 	core.vars.import = IR.Variable.new(Fn({Natives.string}, Natives.ir, true))
+
+	core.vars.integer = IR.Variable.new(Ty(Natives.integer), true)
+	core.vars.float = IR.Variable.new(Ty(Natives.float), true)
+	core.vars.string = IR.Variable.new(Ty(Natives.string), true)
+	core.vars.boolean = IR.Variable.new(Ty(Natives.boolean), true)
+	core.vars.void = IR.Variable.new(Ty(Natives.void), true)
 
 	local current = Scope.new(core)
 
@@ -115,8 +134,8 @@ local function assemble(ast, imports)
 	local function assembleNode(node)
 		local variant, data = node.variant, node.data
 		if variant == NodeVariant.Module then
-			current.can_return = true
-			return assembleNode(data)
+			current.module = true
+			return IR.new(Variant.Module, { "main", assembleNode(data) }, current.returned and current.returned.type)
 		elseif variant == NodeVariant.Block then
 			local items = scope(function(scope)
 				local items = {} ---@type IR[]
@@ -152,7 +171,7 @@ local function assemble(ast, imports)
 			end
 
 			local block, returned = scope(function(scope)
-				scope.can_return = true
+				scope.fn = true
 				scope.const = attrs.const ~= nil
 
 				for _, param in ipairs(data[3]) do
@@ -172,10 +191,16 @@ local function assemble(ast, imports)
 
 			return ir
 		elseif variant == NodeVariant.Return then
-			local scope = assert(current:attr("can_return"), "Cannot return from current scope")
-
 			local ret = assembleNode(data)
-			scope.returned = ret
+
+			local scope = assert(current:attr("function") or current:attr("module"))
+			if scope.returned then
+				assert(scope.returned.type == ret.type, "Cannot return type " .. tostring(ret.type) .. " in scope that returns " .. tostring(scope.returned.type))
+			else
+				scope.returned = ret
+			end
+
+			-- local scope = assert(current:attr("can_return"), "Cannot return from current scope")
 
 			local s = current
 			while s ~= scope do -- Recurse upward scopes marking dead, until reaching initial function scope
@@ -184,7 +209,11 @@ local function assemble(ast, imports)
 				s = s.parent
 			end
 
-			return IR.new(Variant.Return, ret)
+			local ir = IR.new(Variant.Return, ret)
+			if current:attr("module") then
+				const_rt:eval(ir)
+			end
+			return ir
 		elseif variant == NodeVariant.Declare then
 			local const, name, expr = data[1], data[2], assembleNode(data[3])
 			assert(not current.vars[name], "Cannot re-declare existing variable " .. name)
@@ -292,13 +321,41 @@ local function assemble(ast, imports)
 		elseif variant == NodeVariant.Literal then
 			local ty = Type.from(data[1])
 			return IR.new(Variant.Literal, { ty, data[2] }, ty, data[2])
+		elseif variant == NodeVariant.StructInstance then
+			local name, fields = data[1], {}
+
+			if name then
+				local struct = assert(current:find(name), "Invalid type to instantiate (" .. tostring(data[1]) .. ")")
+				assert(struct.const, "Type must be constant")
+				assert(struct.type.variant == Type.Variant.Struct, "Cannot instantiate non-struct type (" .. tostring(struct.type) .. ")")
+
+				for _, field in ipairs(data[2]) do
+					local key, expr = field[1], assembleNode(field[2])
+					assert(expr.type == struct.type.union.fields[key], "Cannot set field " .. key .. " to value of type " .. tostring(expr.type))
+					fields[key] = expr
+				end
+
+				return IR.new(Variant.StructInstance, { struct.type, fields }, struct.type)
+			else -- Anonymous struct
+				local field_types = {}
+				for _, field in ipairs(data[2]) do
+					local key, expr = field[1], assembleNode(field[2])
+					fields[key], field_types[key] = expr, expr.type
+				end
+
+				return IR.new(Variant.StructInstance, { nil, fields }, Struct(field_types))
+			end
 		elseif variant == NodeVariant.Struct then
 			local fields = {}
-			for key, value in ipairs(data) do
-				fields[key] = assembleNode(value)
+
+			for _, field in ipairs(data) do
+				local ty = assert(current:find(field[2]), "Variable " .. field[2] .. " does not exist")
+				assert(ty.const, "Type must be constant")
+				assert(ty.type.variant == Type.Variant.Type, "Cannot use non-type as struct type")
+				fields[field[1]] = ty.type.union.type
 			end
 
-			return IR.new(Variant.Struct, fields)
+			return IR.new(Variant.Struct, fields, Struct(fields))
 		elseif variant == NodeVariant.Identifier then ---@cast data string
 			local var = assert(current:find(data), "Variable " .. data .. " does not exist")
 			return IR.new(Variant.Identifier, data, var.type, var.val)
@@ -307,12 +364,12 @@ local function assemble(ast, imports)
 		end
 	end
 
-	local ir = assembleNode(ast)
-	for i, imp in ipairs(header) do
-		table.insert(ir.data, 1, imp)
+	local module = assembleNode(ast)
+	for i = #header, 1, -1 do
+		table.insert(module.data[2].data, 1, header[i])
 	end
 
-	return IR.new(Variant.Module, {"main", ir})
+	return module
 end
 
 return {

@@ -31,8 +31,11 @@ local Variant = {
 	NotEq = 19,
 
 	Literal = 19, -- "" 22 22.0
-	Struct = 20,
-	Identifier = 21
+
+	StructInstance = 20,
+	Struct = 21,
+
+	Identifier = 22
 }
 
 local DebugVariant = {}
@@ -121,6 +124,46 @@ local function parse(tokens)
 			return b
 		end
 
+		if optConsume(TokenVariant.Keyword, "struct") then
+			consume(TokenVariant.Operator, "{")
+
+			local fields = {}
+			if optConsume(TokenVariant.Operator, "}") then
+				return Node { variant = Variant.Struct, data = fields }
+			end
+
+			repeat
+				local key = consume(TokenVariant.Identifier)
+				consume(TokenVariant.Operator, ":")
+				fields[#fields + 1] = {key.data, consume(TokenVariant.Identifier).data}
+			until not optConsume(TokenVariant.Operator, ",")
+
+			consume(TokenVariant.Operator, "}")
+
+			return Node { variant = Variant.Struct, data = fields }
+		end
+
+		local struct_type = optConsume(TokenVariant.Identifier)
+
+		if optConsume(TokenVariant.Operator, "{") then
+			local fields = {}
+			if optConsume(TokenVariant.Operator, "}") then
+				return Node { variant = Variant.StructInstance, data = { struct_type and struct_type.data, fields } }
+			end
+
+			repeat
+				local key = consume(TokenVariant.Identifier)
+				consume(TokenVariant.Operator, "=")
+				fields[#fields + 1] = {key.data, assert(expr(), "Expected expression for struct field")}
+			until not optConsume(TokenVariant.Operator, ",")
+
+			consume(TokenVariant.Operator, "}")
+
+			return Node { variant = Variant.StructInstance, data = { struct_type and struct_type.data, fields } }
+		elseif struct_type then
+			index = index - 1
+		end
+
 		local lhs
 		if optConsume(TokenVariant.Operator, "(") then
 			lhs = expr()
@@ -129,20 +172,18 @@ local function parse(tokens)
 			lhs = prim()
 		end
 
-		if optConsume(TokenVariant.Operator, "{") then
-			local fields = {}
-			if optConsume(TokenVariant.Operator, "}") then
-				return Node { variant = Variant.Struct, data = fields }
+		if optConsume(TokenVariant.Operator, "[") then
+			local values = {}
+			if optConsume(TokenVariant.Operator, "]") then
+				return Node { variant = Variant.Array, data = values }
 			end
 
 			repeat
-				local key = consume(TokenVariant.Identifier)
-				fields[#fields + 1] = {key, assert(expr(), "Expected expression for struct field")}
+				values[#values + 1] = assert(expr(), "Expected expression for array value")
 			until not optConsume(TokenVariant.Operator, ",")
 
-			consume(TokenVariant.Operator, "}")
-
-			return Node { variant = Variant.Struct, data = fields }
+			consume(TokenVariant.Operator, "]")
+			return Node { variant = Variant.Array, data = values }
 		end
 
 		if not lhs then return end

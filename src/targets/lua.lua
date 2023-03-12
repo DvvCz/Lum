@@ -18,32 +18,22 @@ local Target = {
 			if variant == IRVariant.Module then
 				local buf = {}
 				for i, ir in ipairs(data[2]) do
-					local r = stmt(ir)
-					if r ~= false then
-						buf[i] = r:gsub("\n", "\n")
+					local out = stmt(ir)
+					if out ~= false then
+						buf[i] = out:gsub("\n", "\n")
 					end
 				end
 				return string.format("(function()\n%s\nend)()", table.concat(buf, "\n\t"))
-			elseif variant == IRVariant.Literal then
-				---@type Type, number|boolean|string
-				local ty, val = data[1], data[2]
-				if ty == Natives.string then
-					return string.format("%q", val)
-				elseif ty == Natives.boolean then
-					return val and "true" or "false"
-				elseif ty.variant == Type.Variant.Struct then
-					return "struct"
-				else
-					return tostring(val)
-				end
-			elseif variant == IRVariant.Identifier then
-				return data
 			elseif variant == IRVariant.Call then
 				local args = {}
 				for k, arg in ipairs(data[2]) do
 					args[k] = expr(arg)
 				end
 				return string.format("(%s)(%s)", expr(data[1]), table.concat(args, ", "))
+			elseif variant == IRVariant.Index then
+				return string.format("%s.%s", expr(data[1]), data[2])
+			elseif variant == IRVariant.Negate then
+				return string.format("-%s", expr(data))
 			elseif variant == IRVariant.Add then
 				return string.format("(%s + %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Sub then
@@ -60,8 +50,28 @@ local Target = {
 				return string.format("(%s == %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.NotEq then
 				return string.format("(%s ~= %s)", expr(data[1]), expr(data[2]))
-			elseif variant == IRVariant.Negate then
-				return string.format("-%s", expr(data))
+			elseif variant == IRVariant.Literal then
+				---@type Type, number|boolean|string
+				local ty, val = data[1], data[2]
+				if ty == Natives.string then
+					return string.format("%q", val)
+				elseif ty == Natives.boolean then
+					return val and "true" or "false"
+				elseif ty.variant == Type.Variant.Struct then
+					return "struct"
+				else
+					return tostring(val)
+				end
+			elseif variant == IRVariant.StructInstance then ---@cast data { [1]: Type, [2]: table<string, IR> }
+				local buf = {}
+
+				for key, value in pairs(data[2]) do
+					buf[#buf + 1] = key .. " = " .. expr(value)
+				end
+
+				return "{" .. table.concat(buf, ",") .. "}"
+			elseif variant == IRVariant.Identifier then
+				return data
 			else
 				error("Unimplemented expression: " .. tostring(variant))
 			end
@@ -78,9 +88,9 @@ local Target = {
 			elseif variant == IRVariant.Scope then
 				local buf = {}
 				for i, ir in ipairs(data) do
-					local r = stmt(ir)
-					if r ~= false then
-						buf[#buf + 1] = stmt(ir):gsub("\n", "\n\t")
+					local out = stmt(ir)
+					if out ~= false then
+						buf[#buf + 1] = out:gsub("\n", "\n\t")
 					end
 				end
 				return "\t" .. table.concat(buf, "\n\t")

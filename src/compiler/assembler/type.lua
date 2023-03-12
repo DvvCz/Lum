@@ -2,19 +2,23 @@
 local Variant = {
 	Native = 1,
 
+	--- Constant value of type. const x = integer
+	---@alias TypeUnion { type: Type }
+	Type = 2,
+
 	---@alias FnUnion { const: boolean, params: Type[], ret: Type }
-	Function = 2,
+	Function = 3,
 
 	---@alias StructUnion { fields: table<string, Type> }
-	Struct = 3,
+	Struct = 4,
 
 	---@alias ArrayUnion Type
-	Array = 4,
+	Array = 5,
 }
 
 ---@class Type
 ---@field variant TypeVariant
----@field union FnUnion|StructUnion|ArrayUnion|integer
+---@field union FnUnion|TypeUnion|StructUnion|ArrayUnion|integer
 local TypeMeta = {}
 TypeMeta.__index = TypeMeta
 
@@ -90,6 +94,11 @@ local function Fn(params, ret, const)
 	return setmetatable({ variant = Variant.Function, union = { params = params, ret = ret, const = const } }, TypeMeta)
 end
 
+---@param ty Type
+local function Ty(ty)
+	return setmetatable({ variant = Variant.Type, union = { type = ty } }, TypeMeta)
+end
+
 ---@param fields table<string, Type>
 local function Struct(fields)
 	return setmetatable({ variant = Variant.Struct, union = { fields = fields } }, TypeMeta)
@@ -136,6 +145,7 @@ end
 
 return {
 	Fn = Fn,
+	Ty = Ty,
 	Struct = Struct,
 	Array = Array,
 
