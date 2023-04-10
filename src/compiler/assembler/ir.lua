@@ -5,8 +5,6 @@ local Natives, Fn, Struct = Type.Natives, Type.Fn, Type.Struct
 ---@field variant IRVariant
 ---@field data any
 ---@field type Type
----@field is_const boolean
----@field const any
 local IR = {}
 IR.__index = IR
 
@@ -17,13 +15,11 @@ end
 ---@param variant IRVariant
 ---@param data any
 ---@param type Type?
----@param const any
-function IR.new(variant, data, type, const)
-	return setmetatable({ variant = variant, data = data, type = type or Natives.void, const = const }, IR)
+function IR.new(variant, data, type)
+	return setmetatable({ variant = variant, data = data, type = type or Natives.void }, IR)
 end
 
 ---@class IRVariable
----@field val any? # The value of the variable, if it could be deduced at compile time.
 ---@field type Type # Type of the variable (ie "integer")
 ---@field const boolean?
 local IRVariable = {}

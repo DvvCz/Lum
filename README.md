@@ -1,4 +1,4 @@
-`??????`
+# Lum
 
 This is a simple, statically-typed language written in Lua, inspired by languages like Rust, Zig and Lua itself.
 
@@ -18,46 +18,17 @@ The current biggest language for this case is [Haxe](https://github.com/HaxeFoun
 This isn't quite functional but is a preview of what the language should look like.
 
 ```rs
-// `const` in this case means "compile time", not immutability.
-const std = import("std")
+// `const` means "compile time", not immutability.
 const intrinsics = import("intrinsics")
 
-// Declaration of values
-let x = 5 + -2 * 2
-let y = "dd" + "xyssz"
-
-// Functions
-fn test(x: integer, y: string, z: float) {
-	if intrinsics.target() == "lua" {
-		intrinsics.emit("print(x, y, z)")
-	} else {
-		intrinsics.compile_error("Unimplemented")
+const fn Printer(T: type) {
+	return struct {
+		field: T
 	}
 }
 
-// Control flow
-if true {
-	test(5, "", 3.14)
-} else if false {
-	let x = 4.2 + 3.2
-} else {
-	std.print("Hello, world!")
-}
-
-while true && true {
-	let x = 22
-	let dd = "fffff"
-	x = 55
-}
-
-// Structures
-const T = integer
-
-const MyStruct = struct {
-	myvalue: T
-}
-
-let myinstance = MyStruct { myvalue = 50 }
+const Printer = Printer(integer)
+let x = Printer {}
 ```
 
 ### Why lua?
@@ -66,5 +37,5 @@ Luajit is fast enough, and works really well for writing small code, especially 
 
 ### Status?
 
-This language isn't quite ready yet. It needs a standard library, online repl, and a name..
+This language isn't quite ready yet. It needs a standard library, online repl, and documentation..
 Come back later!

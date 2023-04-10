@@ -73,18 +73,13 @@ function Interpreter:eval(ir)
 		self:eval(data[2])
 		return self.__returnvalue__
 	elseif variant == Variant.Scope then ---@cast data IR[]
-		local scope = InterpreterScope.new(self.scope)
-		self.scope = scope
+		self.scope = InterpreterScope.new(self.scope)
 
-		local last = table.remove(data)
-
-		if scope:attr("returning") then
+		if self.scope:attr("returning") then
 			for _, ir in ipairs(data) do
 				self:eval(ir)
 				if self.__return__ then
-					self.__return__ = false
-					print("ret, returning", self.__returnvalue__)
-					return self.__returnvalue__
+					break
 				end
 			end
 		else
@@ -93,9 +88,7 @@ function Interpreter:eval(ir)
 			end
 		end
 
-		local out = self:eval(last)
 		self.scope = self.scope.parent
-		return out
 	elseif variant == Variant.If then
 		for _, dat in ipairs(data) do
 			local cond, block = dat[1], dat[2]
@@ -116,11 +109,22 @@ function Interpreter:eval(ir)
 	elseif variant == Variant.Fn then
 		local attrs, name, params, body = data[1], data[2], data[3], data[4]
 		self.scope.vars[name] = function(args)
+			self.scope = InterpreterScope.new(self.scope)
+			self.scope.returning = true
+
 			for i, arg in ipairs(args) do
-				self.scope[params[i][1]] = arg
+				self.scope.vars[params[i][1]] = arg
 			end
 
-			return self:eval(body)
+			self:eval(body)
+			self.scope = self.scope.parent
+
+			if self.__return__ then
+				self.__return__ = false
+				return self.__returnvalue__
+			else
+				assert(ir.type.union.ret ~= Natives.void, "Missing return for function returning " .. tostring(ir.type.union.ret))
+			end
 		end
 	elseif variant == Variant.Return then
 		self.__return__ = true
@@ -136,6 +140,7 @@ function Interpreter:eval(ir)
 		for i, arg in ipairs(data[2]) do
 			args[i] = self:eval(arg)
 		end
+
 		return fn(args)
 	elseif variant == Variant.Index then
 		return self:eval(data[1])[data[2]]
@@ -157,8 +162,8 @@ function Interpreter:eval(ir)
 		return self:eval(data[1]) and self:eval(data[2])
 	elseif variant == Variant.Or then
 		return self:eval(data[1]) or self:eval(data[2])
-	elseif variant == Variant.Literal then ---@cast data { [1]: any }
-		return data[2]
+	elseif variant == Variant.Literal then ---@cast data any
+		return data
 	elseif variant == Variant.Struct then --- @cast data table<string, Type>
 		return data
 	elseif variant == Variant.StructInstance then ---@cast data { [1]: Type, [2]: table<string, IR> }

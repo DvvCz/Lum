@@ -7,10 +7,11 @@ fn print(msg: string) {
 	intrinsics.emit("print(msg)")
 }
 
-// const number = struct { num: integer }
+// const XYZ = struct { num: integer }
 // let x = number {}
 
 // Equivalent to return std { ... } with types already inferred.
 return {
-	print = print
+	print = print,
+	intrinsics = intrinsics
 }

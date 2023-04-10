@@ -118,12 +118,6 @@ local function parse(tokens)
 			return Node { variant = Variant.Negate, data = expr() }
 		end
 
-		if optConsume(TokenVariant.Keyword, "const") then
-			local b = block()
-			b.data[1] = true -- mark block as constant
-			return b
-		end
-
 		if optConsume(TokenVariant.Keyword, "struct") then
 			consume(TokenVariant.Operator, "{")
 

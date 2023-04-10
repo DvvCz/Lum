@@ -13,6 +13,8 @@ local Target = {
 
 	generate = function(ir)
 		local stmt
+		---@param ir IR
+		---@return string
 		local function expr(ir)
 			local variant, data = ir.variant, ir.data
 			if variant == IRVariant.Module then
@@ -50,17 +52,15 @@ local Target = {
 				return string.format("(%s == %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.NotEq then
 				return string.format("(%s ~= %s)", expr(data[1]), expr(data[2]))
-			elseif variant == IRVariant.Literal then
-				---@type Type, number|boolean|string
-				local ty, val = data[1], data[2]
-				if ty == Natives.string then
-					return string.format("%q", val)
-				elseif ty == Natives.boolean then
-					return val and "true" or "false"
-				elseif ty.variant == Type.Variant.Struct then
+			elseif variant == IRVariant.Literal then ---@cast data number|boolean|string
+				if ir.type == Natives.string then
+					return string.format("%q", data)
+				elseif ir.type == Natives.boolean then
+					return data and "true" or "false"
+				elseif ir.type.variant == Type.Variant.Struct then
 					return "struct"
 				else
-					return tostring(val)
+					return tostring(data)
 				end
 			elseif variant == IRVariant.StructInstance then ---@cast data { [1]: Type, [2]: table<string, IR> }
 				local buf = {}

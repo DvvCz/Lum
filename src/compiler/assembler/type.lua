@@ -1,9 +1,10 @@
 ---@enum TypeVariant
 local Variant = {
+	---@alias NativeUnion integer
 	Native = 1,
 
 	--- Constant value of type. const x = integer
-	---@alias TypeUnion { type: Type }
+	---@alias TypeUnion Type
 	Type = 2,
 
 	---@alias FnUnion { const: boolean, params: Type[], ret: Type }
@@ -18,21 +19,32 @@ local Variant = {
 
 ---@class Type
 ---@field variant TypeVariant
----@field union FnUnion|TypeUnion|StructUnion|ArrayUnion|integer
+---@field union NativeUnion|TypeUnion|StructUnion|FnUnion|ArrayUnion
 local TypeMeta = {}
 TypeMeta.__index = TypeMeta
 
 local DebugNatives, ANY
 
 function TypeMeta:__tostring()
-	if self.variant == Variant.Function then
+	local variant, union = self.variant, self.union
+	if variant == Variant.Native then ---@cast union NativeUnion
+		return DebugNatives[self]
+	elseif variant == Variant.Type then ---@cast union TypeUnion
+		return "Type(" .. tostring(union) .. ")"
+	elseif variant == Variant.Function then ---@cast union FnUnion
 		local buf = {}
-		for i, param in ipairs(self.union.params) do
+		for i, param in ipairs(union.params) do
 			buf[i] = tostring(param)
 		end
-		return "Fn(" .. table.concat(buf, ", ") ..  "): " .. tostring(self.union.ret)
-	elseif self.variant == Variant.Native then
-		return DebugNatives[self]
+		return "Fn(" .. table.concat(buf, ", ") ..  "): " .. tostring(union.ret)
+	elseif variant == Variant.Struct then ---@cast union StructUnion
+		local buf = {}
+		for name, ty in pairs(union.fields) do
+			buf[#buf + 1] = name .. ": " .. tostring(ty)
+		end
+		return "Struct { " .. table.concat(buf, ", ") .. " }"
+	elseif variant == Variant.Array then ---@cast union ArrayUnion
+		return "Array(" .. tostring(union) .. ")"
 	else
 		return "Type { variant = " .. self.variant .. ", union = " .. tostring(self.union) .. " }"
 	end
@@ -65,6 +77,10 @@ function TypeMeta:__eq(rhs)
 		end
 
 		return lhs.ret == rhs.ret
+	elseif self.variant == Variant.Type then
+		if rhs.variant ~= Variant.Type then return false end
+
+		return self.union == rhs.union
 	elseif self.variant == Variant.Struct then
 		if rhs.variant ~= Variant.Struct then return false end
 
@@ -72,10 +88,18 @@ function TypeMeta:__eq(rhs)
 		---@cast lhs StructUnion
 		---@cast rhs StructUnion
 
-		if #lhs.fields ~= #rhs.fields then return false end
+		for k, v in pairs(lhs.fields) do
+			local rhs = rhs.fields[k]
+			if not rhs or rhs ~= v then
+				return false
+			end
+		end
 
-		for i, field in ipairs(lhs.fields) do
-			if field ~= rhs.fields[i] then return false end
+		for k, v in pairs(rhs.fields) do
+			local lhs = lhs.fields[k]
+			if not lhs or lhs ~= v then
+				return false
+			end
 		end
 
 		return true
@@ -96,7 +120,7 @@ end
 
 ---@param ty Type
 local function Ty(ty)
-	return setmetatable({ variant = Variant.Type, union = { type = ty } }, TypeMeta)
+	return setmetatable({ variant = Variant.Type, union = ty }, TypeMeta)
 end
 
 ---@param fields table<string, Type>
@@ -118,7 +142,7 @@ ANY = Native(0)
 local VOID = Native(1)
 local INTEGER, FLOAT = Native(2), Native(3)
 local STRING, BOOLEAN = Native(4), Native(5)
-local IR = Native(6)
+local IR, TYPE = Native(6), Native(7)
 
 local Natives = {
 	[0] = ANY, ["any"] = ANY,
@@ -127,7 +151,8 @@ local Natives = {
 	[3] = FLOAT, ["float"] = FLOAT,
 	[4] = STRING, ["string"] = STRING,
 	[5] = BOOLEAN, ["boolean"] = BOOLEAN,
-	[6] = IR, ["ir"] = IR
+	[6] = IR, ["ir"] = IR,
+	[7] = TYPE, ["type"] = TYPE
 }
 
 DebugNatives = {}

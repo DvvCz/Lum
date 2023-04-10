@@ -9,22 +9,9 @@ local Interpreter = require "compiler.interpreter"
 
 local lua = require "targets.lua"
 
-local tokens = Lexer.lex([[
-	const std = import("std")
-	const T = integer
+local tokens = Lexer.lex(io.open("src/main.lum", "rb"):read("*a"))
 
-	const XYZ = struct {
-		x: T
-	}
-
-	fn test() {
-		const y = std.print
-	}
-
-	return { x = test, y = 23 }
-]])
-
-local handle = assert(io.open("src/targets/lua/std.simpl"), "Couldn't get std")
+local handle = assert(io.open("src/targets/lua/std.lum"), "Couldn't get std")
 local std = handle:read("*a")
 handle:close()
 
