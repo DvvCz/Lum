@@ -16,7 +16,7 @@ local Keywords = {
 	["if"] = true, ["else"] = true,
 	["while"] = true, ["for"] = true,
 
-	["let"] = true,
+	["var"] = true,
 	["fn"] = true, ["return"] = true,
 
 	["enum"] = true, ["struct"] = true,

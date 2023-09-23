@@ -5,6 +5,7 @@ local Natives, Fn, Struct = Type.Natives, Type.Fn, Type.Struct
 ---@field variant IRVariant
 ---@field data any
 ---@field type Type
+---@field const true?
 local IR = {}
 IR.__index = IR
 
@@ -15,8 +16,9 @@ end
 ---@param variant IRVariant
 ---@param data any
 ---@param type Type?
-function IR.new(variant, data, type)
-	return setmetatable({ variant = variant, data = data, type = type or Natives.void }, IR)
+---@param const boolean?
+function IR.new(variant, data, type, const)
+	return setmetatable({ variant = variant, data = data, type = type or Natives.void, const = const }, IR)
 end
 
 ---@class IRVariable
@@ -48,28 +50,29 @@ IR.Variant = {
 	Declare = 7,
 	Assign = 8,
 
-	Call = 9,
-	Index = 10,
+	Group = 9,
+	Call = 10,
+	Index = 11,
 
-	Negate = 11,
+	Negate = 12,
 
-	Add = 12,
-	Sub = 13,
-	Mul = 14,
-	Div = 15,
+	Add = 13,
+	Sub = 14,
+	Mul = 15,
+	Div = 16,
 
-	And = 16,
-	Or = 17,
+	And = 17,
+	Or = 18,
 
-	Eq = 18,
-	NotEq = 19,
+	Eq = 19,
+	NotEq = 20,
 
-	Literal = 20, -- "" 22 22.0
+	Literal = 21, -- "" 22 22.0
 
-	StructInstance = 21,
-	Struct = 22,
+	StructInstance = 22,
+	Struct = 23,
 
-	Identifier = 23
+	Identifier = 24
 }
 
 return IR

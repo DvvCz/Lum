@@ -123,18 +123,18 @@ function Interpreter:eval(ir)
 				self.__return__ = false
 				return self.__returnvalue__
 			else
-				assert(ir.type.union.ret ~= Natives.void, "Missing return for function returning " .. tostring(ir.type.union.ret))
+				assert(ir.type.union.ret == Natives.void, "Missing return for function returning " .. tostring(ir.type.union.ret))
 			end
 		end
 	elseif variant == Variant.Return then
 		self.__return__ = true
 		self.__returnvalue__ = self:eval(data)
 	elseif variant == Variant.Declare then
-		local v = self:eval(data[3])
-		self.scope.vars[data[2]] = assert(v, "Cannot set to nil")
+		self.scope.vars[data[1]] = assert(self:eval(data[2]), "Cannot set to nil")
 	elseif variant == Variant.Assign then
 		self.scope.vars[data[1]] = self:eval(data[2])
 	elseif variant == Variant.Call then
+		print("const fn call", debug.traceback())
 		local fn = assert(self:eval(data[1]), "undefined fn at runtime " .. tostring(data[1]))
 		local args = {}
 		for i, arg in ipairs(data[2]) do
@@ -169,6 +169,7 @@ function Interpreter:eval(ir)
 	elseif variant == Variant.StructInstance then ---@cast data { [1]: Type, [2]: table<string, IR> }
 		return data
 	elseif variant == Variant.Identifier then
+		print(self.scope, data, debug.traceback())
 		return assert(self.scope:find(data), "Couldn't find variable " .. data)
 	end
 end

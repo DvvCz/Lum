@@ -1,20 +1,10 @@
-const std = import("std")
-const intrinsics = import("intrinsics")
-
-fn print(s: string) {
-	intrinsics.emit("print(s)")
+const fn yo(x: integer) {
+	return x + 5
 }
 
-const Dog = struct {
-	name: string
-}
+// core.emit("print('yo')")
 
-fn speak(dog: Dog) {
-	print(dog.name)
-}
+// const std = import("std")
 
-let jimmy = Dog {
-	name = "Jimmy"
-}
+// const Fn = typing.function([string], string)
 
-speak(jimmy)

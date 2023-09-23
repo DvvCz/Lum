@@ -1,23 +1,13 @@
-const core = import("core")
+const intrinsics = import("intrinsics")
 
 // Should be inlined as an optimization.
 // Variadic parameters would be good in the future.
 fn __print__impl(msg: string) {
 	// Proof of concept. Don't know if externs will be a thing.
-	core.emit("print(msg)")
-}
-
-// const XYZ = struct { num: integer }
-// let x = number {}
-
-fn random() {
-	return core.emitvalue("math.random()", float)
+	intrinsics.emit("System.out.print(msg)")
 }
 
 // Equivalent to return std { ... } with types already inferred.
 return {
-	math = import("math"),
-	print = __print__impl,
-	target = "lua",
-	random = random
+	print = __print__impl
 }

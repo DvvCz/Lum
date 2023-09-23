@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<link href="//cdn.muicss.com/mui-0.10.3/css/mui.min.css" rel="stylesheet" type="text/css" />
+	<script src="https://unpkg.com/fengari-web@0.1.4/dist/fengari-web.js"></script>
+</head>
+
+<body>
+	<button id="test">
+
+	</button>
+</body>
+
+<script type="application/lua">
+	package.path = package.path .. "../?.lua;../src/?.lua;../src/compiler/?.lua"
+
+	local js = require "js"
+	local window, document = js.global, js.global.document
+
+	local lexer, parser, optimizer = require "lexer", require "parser", require "optimizer"
+
+	function window:compileSrc(code)
+		local ok, err = pcall(function()
+			local tokens = lexer.lex(code)
+			local ast = parser.parse(tokens)
+			local opt_ast = optimizer.optimize(ast)
+			return opt_ast
+		end)
+
+		if ok then
+			local buf, nbuf = { "{" }, 1
+			for k, v in ipairs(buf) do
+				nbuf = nbuf + 1
+				buf[nbuf] = string.format("[%s] = %s,", k, v)
+			end
+			buf[nbuf + 1] = "}"
+			print(nbuf)
+			return {true, table.concat(buf, "\n")}
+		else
+			return {false, err}
+		end
+	end
+</script>
+
+<script type="module">
+	import { html, Component, render } from "https://unpkg.com/htm/preact/standalone.module.js";
+
+	// Fengari handles table returns very weird. (It's flipped..?)
+	let [err_or_code, ok] = window.compileSrc("let x = 2 + 3 + 6");
+	[err_or_code, ok] = [err_or_code[1], ok[1]];
+
+	if (!ok) {
+		console.error(`Errored: ${err_or_code}`);
+	} else {
+		console.log("OK!", err_or_code);
+	}
+</script>
+
+</html>

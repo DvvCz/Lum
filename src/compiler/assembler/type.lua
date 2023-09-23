@@ -23,7 +23,7 @@ local Variant = {
 local TypeMeta = {}
 TypeMeta.__index = TypeMeta
 
-local DebugNatives, ANY
+local DebugNatives, ANY, TYPE
 
 function TypeMeta:__tostring()
 	local variant, union = self.variant, self.union
@@ -59,6 +59,18 @@ function TypeMeta:__eq(rhs)
 	if
 		(self.variant == Variant.Native and self.union == ANY.union) or
 		(rhs.variant == Variant.Native and rhs.union == ANY.union)
+	then
+		return true
+	end
+
+	if
+		(self.variant == Variant.Native and self.union == TYPE.union) and
+		(rhs.variant == Variant.Type)
+
+		or
+
+		(self.variant == Variant.Type) and
+		(rhs.variant == Variant.Native and self.union == TYPE.union)
 	then
 		return true
 	end
@@ -142,7 +154,8 @@ ANY = Native(0)
 local VOID = Native(1)
 local INTEGER, FLOAT = Native(2), Native(3)
 local STRING, BOOLEAN = Native(4), Native(5)
-local IR, TYPE = Native(6), Native(7)
+local IR = Native(6)
+TYPE = Native(7)
 
 local Natives = {
 	[0] = ANY, ["any"] = ANY,

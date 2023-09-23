@@ -3,13 +3,9 @@ local Type = require "compiler.assembler.type"
 
 local IRVariant, Natives = IR.Variant, Type.Natives
 
----@class Target
----@field name string
----@field generate (fun(ir: IR): string)?
-
 ---@type Target
 local Target = {
-	name = "Lua",
+	name = "Java",
 
 	generate = function(ir)
 		local stmt
@@ -19,8 +15,6 @@ local Target = {
 			local variant, data = ir.variant, ir.data
 			if variant == IRVariant.Module then
 				return string.format("(function()\n%s\nend)()", stmt(data[2]))
-			elseif variant == IRVariant.Group then
-				return string.format("(%s)", expr(data))
 			elseif variant == IRVariant.Call then
 				local args = {}
 				for k, arg in ipairs(data[2]) do
@@ -32,9 +26,6 @@ local Target = {
 			elseif variant == IRVariant.Negate then
 				return string.format("-%s", expr(data))
 			elseif variant == IRVariant.Add then
-				if data[1].type == Type.Natives["string"] then
-					return string.format("(%s .. tostring(%s))", expr(data[1]), expr(data[2]))
-				end
 				return string.format("(%s + %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Sub then
 				return string.format("(%s - %s)", expr(data[1]), expr(data[2]))
@@ -43,13 +34,13 @@ local Target = {
 			elseif variant == IRVariant.Div then
 				return string.format("(%s / %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.And then
-				return string.format("(%s and %s)", expr(data[1]), expr(data[2]))
+				return string.format("(%s && %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Or then
-				return string.format("(%s or %s)", expr(data[1]), expr(data[2]))
+				return string.format("(%s || %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Eq then
 				return string.format("(%s == %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.NotEq then
-				return string.format("(%s ~= %s)", expr(data[1]), expr(data[2]))
+				return string.format("(%s != %s)", expr(data[1]), expr(data[2]))
 			elseif variant == IRVariant.Literal then ---@cast data number|boolean|string
 				if ir.type == Natives.string then
 					return string.format("%q", data)
@@ -78,13 +69,11 @@ local Target = {
 		---@param ir IR
 		---@return string
 		function stmt(ir)
-			if ir.const then return false end
-
 			local variant, data = ir.variant, ir.data
 			if variant == IRVariant.Module then
 				---@type string, IR
-				local _name, scope = data[1], data[2]
-				return string.format("do\n%s\nend", stmt(scope))
+				local name, scope = data[1], data[2]
+				return string.format("package %s;\nclass %s {\n\tstatic void main(String[] _args) {\n%s\n}\n}", name, name, stmt(scope):gsub("\n", "\n\t"))
 			elseif variant == IRVariant.Scope then
 				local buf = {}
 				for i, ir in ipairs(data) do
@@ -119,6 +108,7 @@ local Target = {
 			elseif variant == IRVariant.Return then
 				return string.format("return %s", expr(data))
 			elseif variant == IRVariant.Declare then
+				if data[1] then return false end
 				return string.format("local %s = %s", data[2], expr(data[3]))
 			elseif variant == IRVariant.Assign then
 				return string.format("%s = %s", data[1], expr(data[2]))
